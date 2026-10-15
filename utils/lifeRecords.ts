@@ -1,3 +1,4 @@
+import {buildHealthSummary} from './userHealth';
 import { sleepPayload, sleepDate, sleepSummary, sameSleep } from './sleepRecords';
 import { withReplyCancellation, type ReplyRun } from './chatReplyCancellation';
 
@@ -36,6 +37,7 @@ export const isLifeModuleOn = (char: CharacterProfile, module: LifeRecordModule)
         case 'med': return char.lifeRecordMedEnabled !== false;
         case 'expense': return char.lifeRecordExpenseEnabled !== false;
         case 'exercise': return char.lifeRecordExerciseEnabled !== false;
+        case 'health': return char.lifeRecordHealthEnabled === true;
         case 'sleep': return char.lifeRecordSleepEnabled === true;
     }
 };
@@ -71,6 +73,8 @@ const PERIOD_AUTO_CLOSE_DAYS = 10;
 
 export interface PeriodStatus {
     inPeriod: boolean;
+    predictionEnd?: string;
+    predictionSource?: 'external';
     /** 经期第几天（1-based，仅 inPeriod 时有意义） */
     dayN?: number;
     lastStart?: string;
@@ -94,12 +98,15 @@ export const computePeriodStatus = (
     settings: LifeRecordSettings | null,
     today: string = lifeToday(),
 ): PeriodStatus => {
+    const mode=settings?.periodPredictionMode || 'average';
+    const external=settings?.periodPrediction;
+    const externalPrediction=mode==='external' && external && external.end>=today ? {nextPredicted:external.start,daysUntilNext:diffDays(today,external.start),predictionEnd:external.end,predictionSource:'external' as const} : {};
     const cycle = settings?.cycleLength || DEFAULT_CYCLE_LENGTH;
     const evts = effective(records)
         .filter(r => r.module === 'period' && r.date <= today)
         .sort((a, b) => a.date === b.date ? a.timestamp - b.timestamp : (a.date < b.date ? -1 : 1));
     const lastStartRec = [...evts].reverse().find(r => r.kind === 'start');
-    if (!lastStartRec) return { inPeriod: false };
+    if (!lastStartRec) return { inPeriod: false,...externalPrediction };
     const lastStart = lastStartRec.date;
     const endAfter = [...evts].reverse().find(r => r.kind === 'end' && r.date >= lastStart
         && !(r.date === lastStart && r.timestamp < lastStartRec.timestamp));
@@ -112,11 +119,7 @@ export const computePeriodStatus = (
         dayN: inPeriod ? sinceStart + 1 : undefined,
         lastStart,
         lastEnd: endAfter?.date,
-        nextPredicted,
-        daysUntilNext: diffDays(today, nextPredicted),
-        ovulationDate,
-        ovulationStart: addDays(ovulationDate, -5),
-        ovulationEnd: addDays(ovulationDate, 1),
+        ...(mode==='average' ? {nextPredicted,daysUntilNext:diffDays(today,nextPredicted),ovulationDate,ovulationStart:addDays(ovulationDate,-5),ovulationEnd:addDays(ovulationDate,1)} : externalPrediction),
     };
 };
 
@@ -178,6 +181,7 @@ export const medFreqLabel = (plan: MedPlan): string => {
 // ─── 摘要文案（卡片 & 注入共用） ───
 export const summarizeLifeRecord = (module: LifeRecordModule, kind: string, payload: Record<string, any>): string => {
     switch (module) {
+        case 'health': return '健康数据';
         case 'sleep': return sleepSummary(payload);
         case 'period': return kind === 'start' ? '生理期开始' : '生理期结束';
         case 'med': return `吃药 · ${payload.name || '药'}`;
@@ -187,7 +191,7 @@ export const summarizeLifeRecord = (module: LifeRecordModule, kind: string, payl
 };
 
 export const LIFE_MODULE_LABELS: Record<LifeRecordModule, string> = {
-    period: '生理期', med: '药盒', expense: '记账', exercise: '锻炼', sleep: '睡眠',
+    period: '生理期', med: '药盒', expense: '记账', exercise: '锻炼', sleep: '睡眠', health:'健康',
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -205,6 +209,7 @@ const buildPeriodSummary = (
     records: LifeRecord[], settings: LifeRecordSettings | null, today: string, absolute = false,
 ): string => {
     const st = computePeriodStatus(records, settings, today);
+    if(!st.inPeriod && st.predictionSource==='external') return '- 生理期：'+(st.lastStart?'上次开始于 '+st.lastStart+'；':'尚无历史记录；')+'你手动录入的 Apple 健康预测区间为 '+st.nextPredicted+' 至 '+st.predictionEnd+'（录入于 '+new Date(settings!.periodPrediction!.updatedAt).toLocaleDateString()+'）。这是预测，不是已经发生或实时同步，不按平均周期推算。';
     if (!st.lastStart) return '- 生理期：暂无记录。';
     if (st.inPeriod) {
         return absolute
@@ -387,7 +392,7 @@ export const buildLifeRecordInjection = async (
     const settings = await DB.getLifeRecordSettings().catch(() => null);
     const hidden = getHiddenLifeModules(settings);
     const moduleActive = (m: LifeRecordModule) => isLifeModuleOn(char, m) && !hidden.has(m);
-    if (!(['period', 'med', 'expense', 'exercise', 'sleep'] as LifeRecordModule[]).some(moduleActive)) return '';
+    if (!(['period', 'med', 'expense', 'exercise', 'sleep', 'health'] as LifeRecordModule[]).some(moduleActive)) return '';
 
     const [records, plans, txs] = await Promise.all([
         DB.getAllLifeRecords().catch(() => [] as LifeRecord[]),
@@ -405,6 +410,7 @@ export const buildLifeRecordInjection = async (
     if (moduleActive('med')) dataLines.push(buildMedSummary(plans, records, today, forFirePack));
     if (moduleActive('expense')) dataLines.push(buildExpenseSummary(txs, today, forFirePack));
     if (moduleActive('exercise')) dataLines.push(buildExerciseSummary(records, settings, today, forFirePack));
+    if(moduleActive('health')) dataLines.push(await buildHealthSummary());
     if (moduleActive('sleep')) {
         const recent = effective(records).filter(r => r.module === 'sleep' && r.date <= today).sort((a,b) => b.date.localeCompare(a.date) || b.timestamp-a.timestamp).slice(0,7);
         dataLines.push(recent.length ? '- 睡眠记录（已记录的数据，不代表实时手表状态）：'+recent.map(r => r.date+' '+sleepSummary(r.payload)).join('；') : '- 睡眠：暂无已导入记录。不能推测 TA 已睡着或醒来。');
@@ -497,6 +503,7 @@ const findDuplicate = async (
     const byName = (r: LifeRecord) => ({ byName: r.recordedBy === 'user' ? '你自己' : (r.recordedByName || '其他角色') });
     const eff = effective(records);
     switch (d.module) {
+        case 'health': return null;
         case 'sleep': { const rec=eff.find(r=>r.module==='sleep' && sameSleep(r.payload,d.payload)); return rec ? byName(rec) : null; }
         case 'period': {
             // 同日同类兜底（先于状态机）：今天已经有同类事件就绝不再写一条。

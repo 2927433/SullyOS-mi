@@ -1576,6 +1576,7 @@ ${isInitialGeneration ? `
                                        ['lifeRecordPeriodEnabled', 'period', '生理期', '经期状态 / 周期预测 + 代记「来了 / 结束了」'],
                                        ['lifeRecordMedEnabled', 'med', '药盒', '今日用药计划与打卡情况 + 代记「吃了 xx 药」'],
                                        ['lifeRecordExpenseEnabled', 'expense', '记账', '今日支出（与银行 App 打通）+ 代记「花了 xx 钱」'],
+                                       ['lifeRecordHealthEnabled', 'health', '健康数据', '默认关；读取已接收的步数、静息心率等带日期摘要，后台使用上次同步快照'],
                                        ['lifeRecordSleepEnabled', 'sleep', '睡眠记录', '默认关；读取已导入的近期睡眠摘要，并在你提供明确时间时帮忙代记'],
                                        ['lifeRecordExerciseEnabled', 'exercise', '锻炼', '今日 / 本周锻炼情况 + 代记「做了 xx 运动」'],
                                    ] as const).filter(([, moduleKey]) => !hiddenLifeModules.includes(moduleKey)).map(([field, , label, desc]) => (
@@ -1585,8 +1586,8 @@ ${isInitialGeneration ? `
                                                <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">{desc}</p>
                                            </div>
                                            <button
-                                               onClick={() => handleChange(field, field === 'lifeRecordSleepEnabled' ? formData[field] !== true : formData[field] === false)}
-                                               className={`w-12 h-7 rounded-full transition-colors relative shrink-0 ${(field === 'lifeRecordSleepEnabled' ? formData[field] === true : formData[field] !== false) ? 'bg-primary' : 'bg-slate-200'}`}
+                                               onClick={() => handleChange(field, (field === 'lifeRecordSleepEnabled' || field === 'lifeRecordHealthEnabled') ? formData[field] !== true : formData[field] === false)}
+                                               className={`w-12 h-7 rounded-full transition-colors relative shrink-0 ${((field === 'lifeRecordSleepEnabled' || field === 'lifeRecordHealthEnabled') ? formData[field] === true : formData[field] !== false) ? 'bg-primary' : 'bg-slate-200'}`}
                                            >
                                                <div className={`absolute top-0.5 w-6 h-6 bg-white rounded-full shadow-md transition-transform ${formData[field] !== false ? 'translate-x-5' : 'translate-x-0.5'}`}></div>
                                            </button>

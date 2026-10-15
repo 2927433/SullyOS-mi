@@ -1,3 +1,5 @@
+import PeriodHealthPanel from './PeriodHealthPanel';
+import UserHealthPanel from './UserHealthPanel';
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useOS } from '../../context/OSContext';
@@ -5,7 +7,7 @@ import { DB } from '../../utils/db';
 import { BankTransaction, LifeRecord, LifeRecordModule, LifeRecordSettings, MedPlan } from '../../types';
 import {
     DEFAULT_CYCLE_LENGTH, DEFAULT_PERIOD_LENGTH, computePeriodStatus, getPeriodIntervals,
-    isMedPlanDueToday, lifeAddDays, medFreqLabel, weekStartOf,
+    isMedPlanDueToday, lifeDiffDays, lifeAddDays, medFreqLabel, weekStartOf,
 } from '../../utils/lifeRecords';
 import { useLocalDateKey } from '../../hooks/useLocalDateKey';
 import { markAmsgStateDirtyForAll } from '../../utils/amsgStateSync';
@@ -44,6 +46,7 @@ const iconStroke = (accent: string): React.SVGProps<SVGSVGElement> => ({
 });
 
 const THEMES: Record<LifeRecordModule, ModuleTheme> = {
+    health: {cn:'健康',en:'HEALTH',accent:'#6087bc',deep:'#405a7c',soft:'#d0def0',paper:'#f8faff',icon:<span aria-hidden>♡</span>},
     sleep: {cn:'睡眠',en:'SLEEP',accent:'#71619c',deep:'#514576',soft:'#d9cfea',paper:'linear-gradient(160deg,#faf8fd,#efeaf7)',icon:<span aria-hidden>☾</span>},
     period: {
         cn: '生理期', en: 'CYCLE', accent: '#a34a5e', deep: '#7d3646', soft: '#e7c3ca',
@@ -67,7 +70,7 @@ const THEMES: Record<LifeRecordModule, ModuleTheme> = {
     },
 };
 
-const MODULE_ORDER: LifeRecordModule[] = ['period', 'med', 'expense', 'exercise', 'sleep'];
+const MODULE_ORDER: LifeRecordModule[] = ['period', 'med', 'expense', 'exercise', 'sleep', 'health'];
 
 const fmtCN = (s: string): string => {
     const p = (s || '').split('-');
@@ -375,7 +378,7 @@ const LifeRecordPanel: React.FC = () => {
     const predictedDaySet = useMemo(() => {
         const set = new Set<string>();
         if (periodStatus.nextPredicted && !periodStatus.inPeriod) {
-            const span = settings?.periodLength || DEFAULT_PERIOD_LENGTH;
+            const span = periodStatus.predictionEnd ? lifeDiffDays(periodStatus.nextPredicted,periodStatus.predictionEnd)+1 : settings?.periodLength || DEFAULT_PERIOD_LENGTH;
             for (let i = 0; i < span; i++) set.add(lifeAddDays(periodStatus.nextPredicted, i));
         }
         return set;
@@ -583,7 +586,7 @@ const LifeRecordPanel: React.FC = () => {
                 </div>
             )}
 
-            {tab !== 'period' && tab !== 'sleep' && visibleModules.includes(tab) && (
+            {tab !== 'period' && tab !== 'sleep' && tab !== 'health' && visibleModules.includes(tab) && (
                 <RecordDateBar
                     theme={THEMES[tab]}
                     date={recordDate}
@@ -600,6 +603,7 @@ const LifeRecordPanel: React.FC = () => {
             )}
 
             {/* ═══ 生理期 ═══ */}
+            {tab === 'period' && visibleModules.includes('period') && <PeriodHealthPanel settings={settings} onSettings={saveSettings} onReload={()=>reload()} />}
             {tab === 'period' && visibleModules.includes('period') && (
                 <>
                     <SoftCard theme={THEMES.period}>
@@ -632,11 +636,11 @@ const LifeRecordPanel: React.FC = () => {
                             )}
 
                             {/* 预测徽章：下次生理期 / 排卵期（日历法估算，只作身体周期信息） */}
-                            {periodStatus.lastStart && !periodStatus.inPeriod && periodStatus.daysUntilNext !== undefined && (
+                            {(periodStatus.lastStart || periodStatus.predictionSource==='external') && !periodStatus.inPeriod && periodStatus.daysUntilNext !== undefined && (
                                 <div className="flex flex-wrap justify-center gap-1.5 mt-3">
-                                    {periodStatus.daysUntilNext >= 0 ? (
+                                    {periodStatus.daysUntilNext >= 0 || periodStatus.predictionSource==='external' ? (
                                         <span className="text-[9px] px-2.5 py-1 rounded-full" style={{ fontFamily: SERIF, color: THEMES.period.deep, background: `${THEMES.period.accent}14`, border: `1px solid ${THEMES.period.soft}` }}>
-                                            下次 {fmtCN(periodStatus.nextPredicted!)} · {periodStatus.daysUntilNext}天后
+                                            {periodStatus.predictionSource==='external'?'Apple 录入区间':'下次'} {fmtCN(periodStatus.nextPredicted!)}{periodStatus.predictionEnd?' 至 '+fmtCN(periodStatus.predictionEnd):' · '+periodStatus.daysUntilNext+'天后'}
                                         </span>
                                     ) : (
                                         <span className="text-[9px] px-2.5 py-1 rounded-full" style={{ fontFamily: SERIF, color: THEMES.period.deep, background: `${THEMES.period.accent}14`, border: `1px solid ${THEMES.period.soft}` }}>
@@ -661,8 +665,8 @@ const LifeRecordPanel: React.FC = () => {
                         </div>
 
                         <div className="relative mt-4 pt-3 flex items-center justify-between"
-                            style={{ borderTop: `1px dashed ${THEMES.period.soft}` }}>
-                            <span className="text-[10px]" style={{ color: FADE, fontFamily: SERIF }}>平均周期（用于预测）</span>
+                            style={{ borderTop: `1px dashed ${THEMES.period.soft}`, display: settings?.periodPredictionMode && settings.periodPredictionMode!=='average' ? 'none' : undefined }}>
+                            <span className="text-[10px]" style={{ color: FADE, fontFamily: SERIF }}>平均周期（仅旧版估算模式使用）</span>
                             <span className="flex items-baseline gap-1">
                                 <input
                                     type="number"
@@ -931,6 +935,7 @@ const LifeRecordPanel: React.FC = () => {
             )}
 
             {/* ═══ 锻炼 ═══ */}
+            {tab === 'health' && visibleModules.includes('health') && <UserHealthPanel />}
             {tab === 'sleep' && visibleModules.includes('sleep') && <SleepRecordPanel records={records} onReload={() => reload()} onRemove={removeRecord} />}
             {tab === 'exercise' && visibleModules.includes('exercise') && (
                 <>

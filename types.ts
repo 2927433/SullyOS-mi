@@ -3046,6 +3046,7 @@ export interface CharacterProfile {
   lifeRecordPeriodEnabled?: boolean;    // 生理期
   lifeRecordMedEnabled?: boolean;       // 药盒
   lifeRecordExpenseEnabled?: boolean;   // 记账（打通银行 bank_transactions）
+  lifeRecordHealthEnabled?: boolean;
   lifeRecordSleepEnabled?: boolean; // 睡眠记录：明确开启后才向角色提供
   lifeRecordExerciseEnabled?: boolean;  // 锻炼
 
@@ -3623,7 +3624,7 @@ export interface TrackerEntry {
 // 记账模块不独立存储——直接读写 BankApp 的 bank_transactions；角色代记的支出
 // 会额外落一条 module='expense' 的 LifeRecord（带 bankTxId）以支撑卡片确认/否决回滚。
 
-export type LifeRecordModule = 'period' | 'med' | 'expense' | 'exercise' | 'sleep';
+export type LifeRecordModule = 'period' | 'med' | 'expense' | 'exercise' | 'sleep' | 'health';
 
 export interface LifeRecord {
     id: string;
@@ -3681,6 +3682,8 @@ export interface MedPlan {
 /** 生活记录全局设置（单例 id='main'） */
 export interface LifeRecordSettings {
     id: string;                // 'main'
+    periodPredictionMode?: 'average' | 'external' | 'off';
+    periodPrediction?: {start:string;end:string;updatedAt:number};
     cycleLength?: number;      // 平均周期天数，默认 28
     periodLength?: number;     // 平均经期天数，默认 5
     /**
