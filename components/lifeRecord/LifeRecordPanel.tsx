@@ -46,8 +46,8 @@ const iconStroke = (accent: string): React.SVGProps<SVGSVGElement> => ({
 });
 
 const THEMES: Record<LifeRecordModule, ModuleTheme> = {
-    health: {cn:'健康',en:'HEALTH',accent:'#6087bc',deep:'#405a7c',soft:'#d0def0',paper:'#f8faff',icon:<span aria-hidden>♡</span>},
-    sleep: {cn:'睡眠',en:'SLEEP',accent:'#71619c',deep:'#514576',soft:'#d9cfea',paper:'linear-gradient(160deg,#faf8fd,#efeaf7)',icon:<span aria-hidden>☾</span>},
+    health: {cn:'健康',en:'HEALTH',accent:'#6087bc',deep:'#405a7c',soft:'#d0def0',paper:'#f8faff',icon:<svg {...iconStroke('#6087bc')}><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/></svg>},
+    sleep: {cn:'睡眠',en:'SLEEP',accent:'#71619c',deep:'#514576',soft:'#d9cfea',paper:'linear-gradient(160deg,#faf8fd,#efeaf7)',icon:<svg {...iconStroke('#71619c')}><path d="M20 15.5A9 9 0 0 1 8.5 4 9 9 0 1 0 20 15.5Z"/></svg>},
     period: {
         cn: '生理期', en: 'CYCLE', accent: '#a34a5e', deep: '#7d3646', soft: '#e7c3ca',
         paper: 'linear-gradient(160deg,#fdf8f6 0%,#faeef0 100%)',
@@ -248,7 +248,7 @@ const ModuleTab: React.FC<{
                 opacity: 0.55,
             }}
         >
-            {theme.icon}
+            <span aria-hidden className="w-5 h-5 shrink-0 flex items-center justify-center">{theme.icon}</span>
             <span className="text-[11px] font-bold leading-none" style={{ fontFamily: SERIF, color: active ? theme.accent : FADE }}>
                 {theme.cn}
             </span>
@@ -935,7 +935,7 @@ const LifeRecordPanel: React.FC = () => {
             )}
 
             {/* ═══ 锻炼 ═══ */}
-            {tab === 'health' && visibleModules.includes('health') && <UserHealthPanel />}
+            {tab === 'health' && visibleModules.includes('health') && <UserHealthPanel onOpenSleep={()=>setTab('sleep')} />}
             {tab === 'sleep' && visibleModules.includes('sleep') && <SleepRecordPanel records={records} onReload={() => reload()} onRemove={removeRecord} />}
             {tab === 'exercise' && visibleModules.includes('exercise') && (
                 <>

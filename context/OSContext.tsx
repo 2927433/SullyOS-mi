@@ -1,3 +1,6 @@
+import { getScheduleWallClock } from '../utils/scheduleTime';
+import { getDailyScheduleForChar } from '../utils/dailySchedule';
+import { proactiveRestReason } from '../utils/proactiveRest';
 import { handleLocalBack } from '../utils/localBackHandlers';
 import {isHomeAssetDisposal} from '../utils/homeAssetCancellation';
 import { processHomeMemoryAfterSave } from '../utils/homeMemoryPostHook';
@@ -2363,6 +2366,11 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
           console.log(`🔔 [Proactive/Global] Trigger fired for ${char.name}`);
 
           try {
+              // All 1.0 timers and catch-up paths converge here. Do not save a hint or call the API during rest.
+              const restMessages = await DB.getRecentMessagesByCharId(charId, 40, true);
+              const daySchedule = await getDailyScheduleForChar(char);
+              if (proactiveRestReason(char, restMessages, daySchedule?.slots)) return;
+
               // 1. Calculate time gap
               const recentMsgs = await DB.getRecentMessagesByCharId(charId, 200);
               const lastRealUserMsg = [...recentMsgs].reverse().find(
@@ -2370,7 +2378,8 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
               );
 
               const now = new Date();
-              const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+              const charNow = getScheduleWallClock(char, now);
+              const timeStr = `${charNow.getFullYear()}-${String(charNow.getMonth()+1).padStart(2,'0')}-${String(charNow.getDate()).padStart(2,'0')} ${String(charNow.getHours()).padStart(2,'0')}:${String(charNow.getMinutes()).padStart(2,'0')}`;
 
               let timeSinceUser = '';
               if (lastRealUserMsg) {

@@ -157,7 +157,8 @@ function handleSWMessage(e: MessageEvent) {
   // messages back-to-back.
   const now = Date.now();
   const lastFire = getLastFireTime(charId);
-  const minGap = Math.min(60_000, schedule.intervalMs * 0.1);
+  // A delayed push from the previous schedule must not bypass a newly started interval.
+  const minGap = schedule.intervalMs;
   if (lastFire > 0 && now - lastFire < minGap) {
     console.log(`[ProactiveChat] Ignoring duplicate trigger for ${charId} (fired ${Math.round((now - lastFire) / 1000)}s ago)`);
     return;

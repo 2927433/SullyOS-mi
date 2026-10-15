@@ -1,4 +1,4 @@
-import {buildHealthSummary} from './userHealth';
+import {buildHealthSummary,healthSleepSummary} from './userHealth';
 import { sleepPayload, sleepDate, sleepSummary, sameSleep } from './sleepRecords';
 import { withReplyCancellation, type ReplyRun } from './chatReplyCancellation';
 
@@ -410,10 +410,10 @@ export const buildLifeRecordInjection = async (
     if (moduleActive('med')) dataLines.push(buildMedSummary(plans, records, today, forFirePack));
     if (moduleActive('expense')) dataLines.push(buildExpenseSummary(txs, today, forFirePack));
     if (moduleActive('exercise')) dataLines.push(buildExerciseSummary(records, settings, today, forFirePack));
-    if(moduleActive('health')) dataLines.push(await buildHealthSummary());
+    if(moduleActive('health')) dataLines.push(await buildHealthSummary(!moduleActive('sleep')));
     if (moduleActive('sleep')) {
-        const recent = effective(records).filter(r => r.module === 'sleep' && r.date <= today).sort((a,b) => b.date.localeCompare(a.date) || b.timestamp-a.timestamp).slice(0,7);
-        dataLines.push(recent.length ? '- 睡眠记录（已记录的数据，不代表实时手表状态）：'+recent.map(r => r.date+' '+sleepSummary(r.payload)).join('；') : '- 睡眠：暂无已导入记录。不能推测 TA 已睡着或醒来。');
+        const snapshot=await DB.getAssetRaw('health_shortcut_snapshot_v1');
+        dataLines.push('- 睡眠记录（已记录的数据，不代表实时手表状态）：'+healthSleepSummary(records.filter(r=>r.date<=today),snapshot)+'。不能据此推测 TA 此刻已睡着或醒来。');
     }
     s += `${dataLines.join('\n')}\n`;
     if (forFirePack) {

@@ -3,9 +3,21 @@ import {beforeEach,describe,expect,it} from 'vitest';
 import {DB} from './db';
 import {readPeriodHealthFile,storePeriodHealthRanges} from './periodHealth';
 import {buildLifeRecordInjection,computePeriodStatus} from './lifeRecords';
+import {healthSleepSummary} from './userHealth';
 const char={id:'health-test',name:'角色',lifeRecordEnabled:true,lifeRecordHealthEnabled:true} as any;
 beforeEach(async()=>{await DB.deleteAsset('health_shortcut_snapshot_v1');await DB.saveLifeRecordSettings({id:'main'});for(const record of await DB.getAllLifeRecords())await DB.deleteLifeRecord(record.id);});
 describe('健康显示与角色读取',()=>{
+ it('睡眠详细记录优先，两个模块同时开启只注入一次，原始汇总不覆盖编辑记录',async()=>{
+  const snapshot={date:'2026-01-02',receivedAt:Date.now(),metrics:{steps:2042,sleepMinutes:426},sleep:[]};
+  await DB.saveAssetRaw('health_shortcut_snapshot_v1',snapshot);
+  const record={id:'sleep-edited',module:'sleep' as const,kind:'session',date:'2026-01-02',timestamp:1,recordedBy:'user',reviewStatus:'confirmed' as const,payload:{start:'2026-01-01T15:00:00Z',end:'2026-01-01T23:00:00Z',durationMinutes:480,source:'手动记录'}};
+  await DB.saveLifeRecord(record);
+  expect(healthSleepSummary([record],snapshot as any)).toContain('8小时0分钟');
+  const prompt=await buildLifeRecordInjection({...char,lifeRecordSleepEnabled:true},'用户',{forFirePack:false});
+  expect(prompt.match(/8小时0分钟/g)).toHaveLength(1);
+  expect(prompt).not.toContain('426');
+  expect(healthSleepSummary([],snapshot as any)).toContain('仅总时长');
+ });
  it('健康开关默认关，开启后普通及后台上下文得到日期和指标',async()=>{await DB.saveAssetRaw('health_shortcut_snapshot_v1',{date:'2026-01-02',receivedAt:Date.now(),metrics:{steps:2042,restingHeartRate:61},sleep:[]});expect(await buildLifeRecordInjection({...char,lifeRecordHealthEnabled:undefined},'用户',{forFirePack:false})).not.toContain('2042');for(const forFirePack of [false,true]){const prompt=await buildLifeRecordInjection(char,'用户',{forFirePack});expect(prompt).toContain('2026-01-02');expect(prompt).toContain('2042');expect(prompt).toContain('静息心率 61');expect(prompt).toContain('不代表今天或实时');}});
  it('全局隐藏健康模块阻断读取',async()=>{await DB.saveAssetRaw('health_shortcut_snapshot_v1',{date:'2026-01-02',receivedAt:Date.now(),metrics:{steps:2345}});await DB.saveLifeRecordSettings({id:'main',hiddenModules:['health']});expect(await buildLifeRecordInjection(char,'用户',{forFirePack:false})).not.toContain('2345');});
 });

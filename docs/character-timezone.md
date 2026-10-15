@@ -79,13 +79,9 @@
 
 下面几处目前仍按设备时间走。不影响日常使用，但角色开了自定义时区时会出现「同一份 prompt 里两个时间打架」。
 
-### 主动消息（改之前先确认 amsg2 分支的状态）
+### 主动消息
 
-| 位置 | 现状 |
-|------|------|
-| `context/OSContext.tsx` 主动消息触发段 | 写进隐藏系统提示的「现在是 X」取设备时间，而同一次请求里 `buildSystemPrompt` 注入的是角色时区的时间。这条 hint 会落库，之后几轮上下文里都留着 |
-
-改法：拿 `resolveCharTimeZone(char)` 折算；注意别把用来算时间差的 `now` 一起换掉，那个必须继续用真实时刻。
+本二改的 1.0 已接入角色时区：隐藏提示时间通过 getScheduleWallClock(char, now) 生成；休息时段和睡眠日程判断也按角色当地时间。距上次聊天的时长仍用真实时间戳相减。所有 1.0 触发在 OSContext 的 runProactive 中统一经过 proactiveRestReason，再写提示及调用模型；2.0 不走这条休息闸门。
 
 主动消息 2.0 那条链（`utils/activeMsgClient.ts` 的 `buildFirePack`）已经接好了：模板带一个 `tzId`，worker 到点渲染的每个时间都以它为参照系（`utils/amsgFirePack.ts`）。凡是「打包这一刻」的状态都不烤进模板，改由 `AMSG_SLOT_*` 槽位到点现算 —— 当前时间、日程当前时段、此刻在听的歌、今日节日 / 天气 / 热搜都走这条路，见 `ChatPrompts.PromptBuildOptions` 上那张表。
 

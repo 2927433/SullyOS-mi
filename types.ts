@@ -3068,6 +3068,10 @@ export interface CharacterProfile {
   proactiveConfig?: {
     enabled: boolean;
     intervalMinutes: number; // 30, 60, 120, 240, etc.
+    quietEnabled?: boolean;
+    quietStart?: string;
+    quietEnd?: string;
+    respectSleep?: boolean;
   };
 
   // 情绪Buff系统
