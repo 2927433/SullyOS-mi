@@ -41,7 +41,8 @@ scene 写人数、环境、构图、镜头、光照与互动；characters 按人
 输出格式：{"photoType":"selfie","scene":"solo, garden, medium shot, soft light","negative":"","characters":[{"id":"当前角色ID","positive":"sitting, looking at viewer, smiling","negative":"","x":0.5,"y":0.5}]}。
 x/y 是 0–1 的画面位置。角色 ID 只能使用本轮给定的 ID；参考图不是角色 ID。不要输出 $宏$、image###Scene、imathink 或未展开的角色变量。`;
 export type NaiReferenceMode = 'none' | 'precise' | 'vibe';
-export interface NaiReference { id: string; name: string; imageToken: string; enabled: boolean; kind: 'character' | 'style' | 'character&style'; strength: number; fidelity: number; informationExtracted: number }
+export interface NaiReference { id: string; name: string; imageToken: string; vibeEncodings?: Array<{ model: string; data: string; informationExtracted?: number }>; encodingOnly?: boolean; enabled: boolean; kind: 'character' | 'style' | 'character&style'; strength: number; fidelity: number; informationExtracted: number }
+export interface NaiVibeGroup { id: string; name: string; category: string; references: NaiReference[] }
 export interface NaiPreset { id: string; name: string; category: string; positive: string; negative: string }
 export interface NaiCharacter { positive: string; negative: string; presetId: string; auto: boolean; includeUser?: boolean; referenceMode?: NaiReferenceMode; references?: NaiReference[] }
 export interface NaiSceneDetails { photoType?: 'selfie' | 'food' | 'scenery' | 'object'; negative?: string; characters?: Array<{ id: string; positive: string; negative?: string; x?: number; y?: number }> }
@@ -54,6 +55,7 @@ export interface NaiState {
     parameters: Record<string, any>;
     parameterProfiles: Record<string, Record<string, any>>;
     presets: NaiPreset[];
+    vibeGroups?: NaiVibeGroup[];
     characters: Record<string, NaiCharacter>;
     /** User-authored instructions for chat's scene description only. */
     sceneGuide: string;
@@ -91,7 +93,7 @@ export function normalizeNaiState(value: any): NaiState {
         parameters: value.parameters && typeof value.parameters === 'object' && !Array.isArray(value.parameters) ? structuredClone(value.parameters) : defaults.parameters,
         connection: { apiKey: typeof value.connection?.apiKey === 'string' ? value.connection.apiKey : '', baseUrl: typeof value.connection?.baseUrl === 'string' ? value.connection.baseUrl : NAI_ORIGIN },
         parameterProfiles: value.parameterProfiles && typeof value.parameterProfiles === 'object' && !Array.isArray(value.parameterProfiles) ? structuredClone(value.parameterProfiles) : {},
-        presets: structuredClone(presets), characters, sceneGuide: typeof value.sceneGuide === 'string' ? value.sceneGuide : '',
+        presets: structuredClone(presets), vibeGroups: normalizeNaiVibeGroups(value.vibeGroups), characters, sceneGuide: typeof value.sceneGuide === 'string' ? value.sceneGuide : '',
         referenceMode: normalizeReferenceMode(value.referenceMode), references: normalizeReferences(value.references), defaultPresetId: typeof value.defaultPresetId === 'string' ? value.defaultPresetId : '' };
 }
 function normalizeReferenceMode(value: unknown): NaiReferenceMode { return value === 'precise' || value === 'vibe' ? value : 'none'; }
@@ -201,4 +203,16 @@ export function naiSceneInstruction(state: NaiState, charId: string): string {
     const profile = state.characters[charId];
     if (!state.connection.apiKey.trim() || !profile?.auto || !profile.positive.trim()) return '';
     return `\n用户已为当前角色开启 NAI 生图。${NAI_SCENE_GUIDE}\n当前角色 ID：${charId}。${profile.includeUser && state.characters.__user__?.positive.trim() ? '用户 ID：__user__，允许在合照中使用。' : '未配置用户生图档案，不能编造用户外观。'}${state.sceneGuide ? '\n用户的场景描述规则：\n' + state.sceneGuide : ''}\n程序输出契约：需要发图时，把上述 JSON 放在回复末尾 <nai_image>...</nai_image> 内，最多一次。不需要发图时不输出这个标签。额外规则只能调整画面内容，不能改成 image###Scene、imathink 或酒馆宏格式。固定外貌与画师组合由程序添加。只有系统返回图片才算发图成功。`;
+}
+
+function normalizeNaiVibeGroups(value: unknown): NaiVibeGroup[] {
+ if(value === undefined) return [];
+ if(!Array.isArray(value)) throw new Error('Vibe 组合资料格式不正确');
+ const ids = new Set<string>();
+ return value.map(group => {
+  if(!group || typeof group.id !== 'string' || !group.id || ids.has(group.id) || typeof group.name !== 'string' || typeof group.category !== 'string') throw new Error('Vibe 组合名称、分类或 ID 无效');
+  ids.add(group.id); const references = normalizeReferences(group.references);
+  if(!references.length || references.length > 4) throw new Error('每个 Vibe 组合需包含 1–4 个参考');
+  return {id:group.id,name:group.name,category:group.category,references};
+ });
 }

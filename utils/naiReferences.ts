@@ -38,12 +38,12 @@ export async function addNaiReference(file: File): Promise<NaiReference> {
     return { id: crypto.randomUUID(), name: file.name, imageToken, enabled: true, kind: 'character', strength: 1, fidelity: 1, informationExtracted: 1 };
 }
 type Encode = (image: string, model: string, informationExtracted: number) => Promise<string>;
-function allReferences(state: NaiState): NaiReference[] { return [...(state.references || []), ...Object.values(state.characters).flatMap(profile => profile.references || [])]; }
+function allReferences(state: NaiState): NaiReference[] { return [...(state.references || []), ...Object.values(state.characters).flatMap(profile => profile.references || []), ...(state.vibeGroups || []).flatMap(group => group.references)]; }
 export async function exportNaiPortableLibrary(state: NaiState): Promise<string> {
     const library = JSON.parse(exportNaiLibrary(state));
     const referenceFiles: Record<string, { type: string; data: string }> = {};
     for (const ref of allReferences(state)) {
-        if (referenceFiles[ref.imageToken]) continue;
+        if (!ref.imageToken || referenceFiles[ref.imageToken]) continue;
         const blob = await getBlobForRef(ref.imageToken); if (!blob) throw new Error(`参考图“${ref.name}”缺失，请重新添加后导出`);
         referenceFiles[ref.imageToken] = { type: blob.type, data: await blobToNaiBase64(blob) };
     }
@@ -55,6 +55,7 @@ export async function importNaiPortableLibrary(text: string, current: NaiState):
     if (!files) return state;
     const tokens = new Map<string, string>();
     for (const ref of allReferences(state)) {
+        if (!ref.imageToken) continue;
         const file = files[ref.imageToken];
         if (!file) throw new Error(`资料包缺少参考图“${ref.name}”，没有替换现有配置`);
         if (tokens.has(ref.imageToken)) { ref.imageToken = tokens.get(ref.imageToken)!; continue; }
@@ -79,6 +80,12 @@ export async function attachNaiReferences(state: NaiState, request: NaiRequest, 
     for (const ref of references) {
         signal?.throwIfAborted();
         for (const value of [ref.strength, ref.fidelity, ref.informationExtracted]) if (!Number.isFinite(value) || value < 0 || value > 1) throw new Error('参考图强度、精度和信息提取应在 0–1 之间');
+        if (ref.encodingOnly) {
+            if (mode !== 'vibe') throw new Error('编码 Vibe 不能用于精确参考，请使用原始图片');
+            const encoded = ref.vibeEncodings?.find(item => item.model === model && (item.informationExtracted === undefined || Math.abs(item.informationExtracted - ref.informationExtracted) < 0.00001));
+            if (!encoded) throw new Error('此编码 Vibe 不支持当前模型或信息提取值，请恢复导入参数或换用原始图片');
+            images.push(encoded.data); continue;
+        }
         const blob = await getBlobForRef(ref.imageToken); if (!blob) throw new Error(`参考图“${ref.name}”文件缺失，请重新添加`);
         if (mode === 'precise') {
             images.push(await blobToNaiBase64(await preparePreciseReference(blob)));

@@ -24,11 +24,11 @@ export default function FakeVoiceComposer({ onClose, onSend }: {
             setSending(false);
         }
     };
-    return <Modal isOpen title="发送假语音" onClose={() => { if (!busy.current) onClose(); }} footer={<>
+    return <Modal isOpen title="发送语音" onClose={() => { if (!busy.current) onClose(); }} footer={<>
         <button type="button" disabled={sending} onClick={onClose} className="flex-1 py-3 rounded-2xl bg-slate-100">取消</button>
         <button type="button" disabled={sending || !text.trim()} onClick={() => void submit()} className="flex-1 py-3 rounded-2xl bg-primary text-white disabled:opacity-40">{sending ? '发送中…' : '发送语音条'}</button>
     </>}>
-        <p className="mb-3 text-xs text-slate-500">输入语音内容，发送后显示为语音条，点击可转文字。没有实际声音，角色可以读取内容。</p>
+        <p className="mb-3 text-xs text-slate-500">输入语音内容，发送后显示为语音条，点击可转文字。角色可以读取内容。</p>
         <label className="sr-only" htmlFor="fake-voice-text">语音内容</label>
         <textarea id="fake-voice-text" autoFocus value={text} disabled={sending} onChange={event => setText(event.target.value)} rows={5}
             placeholder="想对 TA 说些什么？" className="w-full rounded-2xl border border-slate-200 p-3 text-sm resize-none" />

@@ -6,12 +6,13 @@ import { NAI_MODELS, NAI_SAMPLERS, NAI_NOISES, NAI_SCENE_GUIDE, normalizeNaiMode
 import { checkNaiConnection, checkNaiSchema, generateNaiImages, loadNaiState, saveNaiState, saveNaiImageToAlbum, type NaiGeneratedImage } from '../../utils/naiService';
 import { readNaiPng } from '../../utils/naiPng';
 import { currentNaiTurn, resolveNaiPromptApi, draftNaiPrompt } from '../../utils/naiPrompt';
+import NaiVibeGroups from './NaiVibeGroups';
 import NaiReferencePanel from './NaiReferencePanel';
 import { exportNaiPortableLibrary, importNaiPortableLibrary } from '../../utils/naiReferences';
 import { DB } from '../../utils/db';
 import './nai.css';
 
-type Tab = 'generate' | 'presets' | 'character' | 'connection';
+type Tab = 'generate' | 'presets' | 'character' | 'connection' | 'vibes';
 const errorText = (error: unknown) => (error as any)?.name === 'AbortError' ? '已取消等待。已发出的 NAI 请求仍可能计费，请检查后再决定是否重发。' : error instanceof Error ? error.message : '操作失败，请重试';
 export default function NaiWorkspace({ characterId, initialTab = 'generate', onClose, onSendToChat }: {
     characterId?: string; initialTab?: Tab; onClose: () => void; onSendToChat?: (image: NaiGeneratedImage) => Promise<void>;
@@ -98,12 +99,13 @@ export default function NaiWorkspace({ characterId, initialTab = 'generate', onC
     const setUserAppearance = (patch: Partial<typeof userAppearance>) => setState(current => current && ({ ...current, characters: { ...current.characters, __user__: { ...(current.characters.__user__ || emptyNaiCharacter()), ...patch } } }));
     return <div className="nai-workspace" role="dialog" aria-modal="true" aria-label="NovelAI 生图">
         <header className="nai-head"><div><h2>NovelAI 生图</h2><small>画面 · 画师组合 · 角色档案</small></div><div className="nai-row"><button disabled={busy || !state} onClick={() => void save()}>保存设置</button><button disabled={busy} onClick={onClose}>关闭</button></div></header>
-        <nav className="nai-tabs">{([['generate', '生图'], ['presets', '画师组合'], ['character', '角色外观'], ['connection', '连接设置']] as [Tab, string][]).map(([key, title]) => <button key={key} disabled={busy} data-active={tab === key} onClick={() => setTab(key)}>{title}</button>)}</nav>
+        <nav className="nai-tabs">{([['generate', '生图'], ['presets', '画师组合'], ['vibes', 'Vibe 组合'], ['character', '角色外观'], ['connection', '连接设置']] as [Tab, string][]).map(([key, title]) => <button key={key} disabled={busy} data-active={tab === key} onClick={() => setTab(key)}>{title}</button>)}</nav>
         {error && <div className="nai-error" role="alert">{error}</div>}
         {notice && <div className="nai-head nai-note" role="status">{notice}</div>}
         <main className="nai-body"><div className="nai-content">
             {!state ? <p className="nai-note">{error ? '配置读取失败，关闭后重试；没有覆盖原配置。' : '正在读取本机生图资料…'}</p> : <>
-            {(tab === 'generate' || tab === 'character') && <section className="nai-card"><label>归属角色<select disabled={busy || !!characterId} value={selectedChar} onChange={e => setSelectedChar(e.target.value)}><option value="">不选择角色</option>{characters.map(char => <option key={char.id} value={char.id}>{char.name}</option>)}</select></label><p className="nai-note">固定特征按角色 ID 保存；画师组合与角色档案可以在不同聊天中复用。</p></section>}
+            {(tab === 'generate' || tab === 'character' || tab === 'vibes') && <section className="nai-card"><label>归属角色<select disabled={busy || !!characterId} value={selectedChar} onChange={e => setSelectedChar(e.target.value)}><option value="">不选择角色</option>{characters.map(char => <option key={char.id} value={char.id}>{char.name}</option>)}</select></label><p className="nai-note">固定特征按角色 ID 保存；画师组合与角色档案可以在不同聊天中复用。</p></section>}
+            {tab === 'vibes' && <NaiVibeGroups state={state} charId={selectedChar} disabled={busy} onChange={setState} onError={setError} />}
             {tab === 'connection' && <section className="nai-card">
                 <label>NAI Persistent API Token<input type="password" autoComplete="new-password" spellCheck={false} disabled={busy} value={state.connection.apiKey} onChange={e => setState({ ...state, connection: { ...state.connection, apiKey: e.target.value } })} placeholder="在自己的设备里填写" /></label>
                 <label className="nai-check"><input type="checkbox" disabled={busy} checked={state.promptApi?.enabled || false} onChange={e => setState({ ...state, promptApi: { baseUrl: '', apiKey: '', model: '', ...state.promptApi, enabled: e.target.checked } })} />使用独立提示词 API（关闭则跟随全局）</label>

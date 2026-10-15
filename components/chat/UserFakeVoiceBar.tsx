@@ -6,7 +6,7 @@ export default function UserFakeVoiceBar({ text }: { text: string }) {
     const seconds = Math.max(1, Math.min(60, Math.ceil(Array.from(text.trim()).length / 4)));
     return (
         <div className="relative z-10" data-fake-voice="true">
-            <button type="button" aria-label="假语音，点击展开或收起文字" aria-expanded={expanded}
+            <button type="button" aria-label="语音，点击展开或收起文字" aria-expanded={expanded}
                 onClick={event => { event.stopPropagation(); setExpanded(value => !value); }}
                 className="flex items-center gap-3 py-1 text-current" style={{ minWidth: Math.min(220, 100 + seconds * 2) }}>
                 <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
