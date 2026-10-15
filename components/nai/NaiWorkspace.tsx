@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useOS } from '../../context/OSContext';
 import TokenImg from '../os/TokenImg';
 import { shareOrDownloadBlob } from '../../utils/shareExport';
-import { NAI_MODELS, NAI_SAMPLERS, NAI_NOISES, NAI_SCENE_GUIDE, normalizeNaiModel, buildNaiRequest, emptyNaiCharacter, parseNaiRequest, defaultNaiState, type NaiPreset, type NaiState, type NaiSceneDetails } from '../../utils/nai';
+import { NAI_MODELS, NAI_SAMPLERS, NAI_NOISES, NAI_SCENE_GUIDE, getNaiSceneGuide, normalizeNaiModel, buildNaiRequest, emptyNaiCharacter, parseNaiRequest, defaultNaiState, type NaiPreset, type NaiState, type NaiSceneDetails } from '../../utils/nai';
 import { checkNaiConnection, checkNaiSchema, generateNaiImages, loadNaiState, saveNaiState, saveNaiImageToAlbum, type NaiGeneratedImage } from '../../utils/naiService';
 import { readNaiPng } from '../../utils/naiPng';
 import { currentNaiTurn, resolveNaiPromptApi, draftNaiPrompt } from '../../utils/naiPrompt';
@@ -115,7 +115,7 @@ export default function NaiWorkspace({ characterId, initialTab = 'generate', onC
                 <p className="nai-note">默认直连 image.novelai.net。自定义地址需要兼容 NAI 路径，并会收到你的 Key；只填自己信任的服务。保存后 Key 在本机，完整备份也可能含 Key；下方单独导出的生图资料库不含 Key。</p>
                 <div className="nai-row"><button disabled={busy} onClick={() => void action(async () => { await checkNaiConnection(state.connection); setNotice('NAI 连接成功，订阅接口已响应。没有进行收费生图。'); })}>测试连接</button><button disabled={busy} onClick={() => void action(async () => { const schema = await checkNaiSchema(); setNotice(`已读取官方生图接口定义（${schema.fields.length} 项参数）。${schema.modelIds.length ? '模型枚举：' + schema.modelIds.join(', ') : '官方未提供生图模型枚举；可选内置模型或填写官方 ID。'}`); })}>检查官方接口</button></div>
                 <label>生图场景规则（可选）<textarea disabled={busy} rows={5} value={state.sceneGuide} onChange={e => setState({ ...state, sceneGuide: e.target.value })} placeholder="只用于角色自动描述场景，例如镜头与构图习惯。不需要放 API Key。" /></label>
-                <details><summary>内置生图提示词规范（自动生图和手动整理均使用）</summary><pre className="nai-preview">{NAI_SCENE_GUIDE}</pre></details>
+                <details><summary>内置生图提示词规范（自动生图和手动整理均使用）</summary><label>生图提示词规范<textarea disabled={busy} rows={16} maxLength={32000} value={getNaiSceneGuide(state)} onChange={e => setState({ ...state, promptGuide: e.target.value })} /></label><button disabled={busy} onClick={() => setState({ ...state, promptGuide: undefined })}>恢复默认生图规范</button><p className="nai-note">编辑后点顶部保存设置。自动发图和两种手动整理共用这份规范；JSON 字段及照片类型仍需符合接口格式。</p></details>
                 <p className="nai-note">这是生图专用规则。画师串放“画师组合”，固定发色、瞳色等放“角色外观”；无需额外安装聊天世界书。</p>
                 <div className="nai-row"><button disabled={busy} onClick={() => void action(async () => { await shareOrDownloadBlob({ blob: new Blob([await exportNaiPortableLibrary(state)], { type: 'application/json' }), fileName: 'SullyOS-NAI-library.json', preferDownloadOnWeb: true }); })}>导出生图资料（不含 Key）</button><button disabled={busy} onClick={() => importRef.current?.click()}>导入生图资料</button></div>
             </section>}
@@ -140,7 +140,7 @@ export default function NaiWorkspace({ characterId, initialTab = 'generate', onC
                     <label>照片类型<select disabled={busy} value={sceneDetails?.photoType || 'selfie'} onChange={e => setSceneDetails({ ...sceneDetails, photoType: e.target.value as NaiSceneDetails['photoType'] })}><option value="selfie">角色照 / 自拍</option><option value="food">美食特写（无人）</option><option value="scenery">眼前景物（无人）</option><option value="object">物品特写（无人）</option></select></label>
                     <label>本次画面内容<textarea disabled={busy} rows={5} value={scene} onChange={e => setScene(e.target.value)} placeholder="在这里写场景、姿势、服装、表情、构图。推荐沿用你在 NAI 官网使用的词。" /></label>
                     <button disabled={busy || !scene.trim()} onClick={() => void action(async () => {
-                        const result = await draftNaiPrompt(scene, resolveNaiPromptApi(state, apiConfig), characters.find(c => c.id === selectedChar), userProfile, state.sceneGuide);
+                        const result = await draftNaiPrompt(scene, resolveNaiPromptApi(state, apiConfig), characters.find(c => c.id === selectedChar), userProfile, state.sceneGuide, undefined, getNaiSceneGuide(state));
                         setScene(result.scene); setSceneDetails(result.details); setNotice('已整理英文场景与人物动作；请检查后再点生成图片。本次只调用了聊天模型。');
                     })}>让聊天模型整理提示词</button>
                     <p className="nai-note">英文 tags 可以直接生成；中文描述可先整理。整理会调用设置中选择的提示词 API，不会立即调用 NAI。自动发图使用同一份内置规范。美食、景物、物品照不追加人物固定词；为避免参考图带入人物，也不使用 Vibe，仅保留纯风格精确参考。</p>
@@ -148,7 +148,7 @@ export default function NaiWorkspace({ characterId, initialTab = 'generate', onC
                         const recent = await DB.getRecentMessagesWithCount(selectedChar, 40);
                         const input = currentNaiTurn(recent.messages);
                         if (!input.trim()) throw new Error('当前角色没有可用的最新用户回合，请直接填写画面描述');
-                        const result = await draftNaiPrompt(input, resolveNaiPromptApi(state, apiConfig), characters.find(c => c.id === selectedChar), userProfile, state.sceneGuide);
+                        const result = await draftNaiPrompt(input, resolveNaiPromptApi(state, apiConfig), characters.find(c => c.id === selectedChar), userProfile, state.sceneGuide, undefined, getNaiSceneGuide(state));
                         setScene(result.scene); setSceneDetails(result.details); setNotice('已根据最新用户回合整理，请检查照片类型、内容后再生图。');
                     })}>按当前聊天整理提示词</button>
                     {sceneDetails?.characters?.length ? <details open><summary>本次人物动作与位置</summary>{sceneDetails.characters.filter(c => c.id === selectedChar || (c.id === '__user__' && profile.includeUser)).map((person, index) => <div key={person.id + index} className="nai-reference"><strong>{person.id === '__user__' ? '用户' : '当前角色'}</strong><label>人物动作提示词<textarea disabled={busy} value={person.positive} onChange={e => setSceneDetails({ ...sceneDetails, characters: sceneDetails.characters?.map(c => c === person ? { ...c, positive: e.target.value } : c) })} /></label><div className="nai-grid">{(['x', 'y'] as const).map(axis => <label key={axis}>{axis.toUpperCase()} 位置<input disabled={busy} type="number" min="0" max="1" step="0.1" value={person[axis] ?? 0.5} onChange={e => setSceneDetails({ ...sceneDetails, characters: sceneDetails.characters?.map(c => c === person ? { ...c, [axis]: Number(e.target.value) } : c) })} /></label>)}</div></div>)}<button disabled={busy} onClick={() => setSceneDetails(undefined)}>清除此轮人物动作</button></details> : null}

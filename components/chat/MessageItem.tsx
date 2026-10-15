@@ -525,6 +525,7 @@ const SullyPayMark: React.FC<{ className?: string }> = ({ className }) => (
 
 // ─── 生活记录代记卡（角色 [[LIFE:...]] 落库后插入；用户可确认 / 否决）───
 const LIFE_CARD_STYLE: Record<string, { icon: string; ring: string; bg: string; label: string }> = {
+    sleep: {icon:'🌙',ring:'#c4b5fd',bg:'linear-gradient(135deg,#f5f3ff,#ede9fe)',label:'睡眠记录'},
     period: { icon: '🌙', ring: '#fda4af', bg: 'linear-gradient(135deg,#fff1f2 0%,#ffe4e6 100%)', label: '生理期' },
     med: { icon: '💊', ring: '#7dd3fc', bg: 'linear-gradient(135deg,#f0f9ff 0%,#e0f2fe 100%)', label: '药盒' },
     expense: { icon: '🧾', ring: '#fcd34d', bg: 'linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%)', label: '记账' },

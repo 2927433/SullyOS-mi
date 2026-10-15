@@ -9,6 +9,7 @@ import {
 } from '../../utils/lifeRecords';
 import { useLocalDateKey } from '../../hooks/useLocalDateKey';
 import { markAmsgStateDirtyForAll } from '../../utils/amsgStateSync';
+import SleepRecordPanel from './SleepRecordPanel';
 import { formatMoney, sumMoney } from '../../utils/format';
 
 /**
@@ -43,6 +44,7 @@ const iconStroke = (accent: string): React.SVGProps<SVGSVGElement> => ({
 });
 
 const THEMES: Record<LifeRecordModule, ModuleTheme> = {
+    sleep: {cn:'睡眠',en:'SLEEP',accent:'#71619c',deep:'#514576',soft:'#d9cfea',paper:'linear-gradient(160deg,#faf8fd,#efeaf7)',icon:<span aria-hidden>☾</span>},
     period: {
         cn: '生理期', en: 'CYCLE', accent: '#a34a5e', deep: '#7d3646', soft: '#e7c3ca',
         paper: 'linear-gradient(160deg,#fdf8f6 0%,#faeef0 100%)',
@@ -65,7 +67,7 @@ const THEMES: Record<LifeRecordModule, ModuleTheme> = {
     },
 };
 
-const MODULE_ORDER: LifeRecordModule[] = ['period', 'med', 'expense', 'exercise'];
+const MODULE_ORDER: LifeRecordModule[] = ['period', 'med', 'expense', 'exercise', 'sleep'];
 
 const fmtCN = (s: string): string => {
     const p = (s || '').split('-');
@@ -581,7 +583,7 @@ const LifeRecordPanel: React.FC = () => {
                 </div>
             )}
 
-            {tab !== 'period' && visibleModules.includes(tab) && (
+            {tab !== 'period' && tab !== 'sleep' && visibleModules.includes(tab) && (
                 <RecordDateBar
                     theme={THEMES[tab]}
                     date={recordDate}
@@ -929,6 +931,7 @@ const LifeRecordPanel: React.FC = () => {
             )}
 
             {/* ═══ 锻炼 ═══ */}
+            {tab === 'sleep' && visibleModules.includes('sleep') && <SleepRecordPanel records={records} onReload={() => reload()} onRemove={removeRecord} />}
             {tab === 'exercise' && visibleModules.includes('exercise') && (
                 <>
                     <TicketCard theme={THEMES.exercise}>
@@ -1154,3 +1157,4 @@ const LifeRecordPanel: React.FC = () => {
 };
 
 export default LifeRecordPanel;
+

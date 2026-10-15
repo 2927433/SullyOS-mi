@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { currentNaiTurn, resolveNaiPromptApi, draftNaiPrompt } from './naiPrompt';
+import { defaultNaiState, getNaiSceneGuide, naiSceneInstruction, normalizeNaiState } from './nai';
 import { ContextBuilder } from './context';
 vi.mock('./context', () => ({ ContextBuilder: { buildCharacterRequest: vi.fn(async (_context, messages) => [{ role: 'system', content: 'bound-character-worldbook' }, ...messages]) } }));
 const api = { baseUrl: 'https://dialogue.example/v1', apiKey: 'dialogue-placeholder', model: 'dialogue-model' } as any;
@@ -29,4 +30,12 @@ describe('当前照片上下文和接口隔离', () => {
  expect(() => resolveNaiPromptApi({promptApi:{enabled:true,baseUrl:'x',apiKey:'',model:'m'}} as any,api)).toThrow('未填完整');
  expect(resolveNaiPromptApi({} as any,api)).toBe(api);
  });
+});
+
+it('编辑的生图规范经保存规范化后用于角色指令与手动翻译', async () => {
+ const state=normalizeNaiState({...defaultNaiState(),promptGuide:'自定义：只用近景，不使用默认镜头规则'});state.connection.apiKey='test';state.characters.c1={positive:'blue hair',negative:'',presetId:'',auto:true};
+ expect(naiSceneInstruction(state,'c1')).toContain('自定义：只用近景');
+ const fetcher=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({photoType:'selfie',scene:'close-up',characters:[]})}}]})));
+ await draftNaiPrompt('近景',api,undefined,{} as any,'',undefined,getNaiSceneGuide(state));
+ expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body)).messages[0].content).toContain('自定义：只用近景');
 });

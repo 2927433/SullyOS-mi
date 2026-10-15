@@ -1,3 +1,4 @@
+import { sleepPayload, sleepDate, sleepSummary, sameSleep } from './sleepRecords';
 import { withReplyCancellation, type ReplyRun } from './chatReplyCancellation';
 
 import { DB } from './db';
@@ -35,6 +36,7 @@ export const isLifeModuleOn = (char: CharacterProfile, module: LifeRecordModule)
         case 'med': return char.lifeRecordMedEnabled !== false;
         case 'expense': return char.lifeRecordExpenseEnabled !== false;
         case 'exercise': return char.lifeRecordExerciseEnabled !== false;
+        case 'sleep': return char.lifeRecordSleepEnabled === true;
     }
 };
 
@@ -176,6 +178,7 @@ export const medFreqLabel = (plan: MedPlan): string => {
 // ─── 摘要文案（卡片 & 注入共用） ───
 export const summarizeLifeRecord = (module: LifeRecordModule, kind: string, payload: Record<string, any>): string => {
     switch (module) {
+        case 'sleep': return sleepSummary(payload);
         case 'period': return kind === 'start' ? '生理期开始' : '生理期结束';
         case 'med': return `吃药 · ${payload.name || '药'}`;
         case 'expense': return `支出 ${formatMoney(payload.amount)}${payload.note ? `（${payload.note}）` : ''}`;
@@ -184,7 +187,7 @@ export const summarizeLifeRecord = (module: LifeRecordModule, kind: string, payl
 };
 
 export const LIFE_MODULE_LABELS: Record<LifeRecordModule, string> = {
-    period: '生理期', med: '药盒', expense: '记账', exercise: '锻炼',
+    period: '生理期', med: '药盒', expense: '记账', exercise: '锻炼', sleep: '睡眠',
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -384,7 +387,7 @@ export const buildLifeRecordInjection = async (
     const settings = await DB.getLifeRecordSettings().catch(() => null);
     const hidden = getHiddenLifeModules(settings);
     const moduleActive = (m: LifeRecordModule) => isLifeModuleOn(char, m) && !hidden.has(m);
-    if (!(['period', 'med', 'expense', 'exercise'] as LifeRecordModule[]).some(moduleActive)) return '';
+    if (!(['period', 'med', 'expense', 'exercise', 'sleep'] as LifeRecordModule[]).some(moduleActive)) return '';
 
     const [records, plans, txs] = await Promise.all([
         DB.getAllLifeRecords().catch(() => [] as LifeRecord[]),
@@ -402,6 +405,10 @@ export const buildLifeRecordInjection = async (
     if (moduleActive('med')) dataLines.push(buildMedSummary(plans, records, today, forFirePack));
     if (moduleActive('expense')) dataLines.push(buildExpenseSummary(txs, today, forFirePack));
     if (moduleActive('exercise')) dataLines.push(buildExerciseSummary(records, settings, today, forFirePack));
+    if (moduleActive('sleep')) {
+        const recent = effective(records).filter(r => r.module === 'sleep' && r.date <= today).sort((a,b) => b.date.localeCompare(a.date) || b.timestamp-a.timestamp).slice(0,7);
+        dataLines.push(recent.length ? '- 睡眠记录（已记录的数据，不代表实时手表状态）：'+recent.map(r => r.date+' '+sleepSummary(r.payload)).join('；') : '- 睡眠：暂无已导入记录。不能推测 TA 已睡着或醒来。');
+    }
     s += `${dataLines.join('\n')}\n`;
     if (forFirePack) {
         s += `\n（以上记录截至 ${fmtCN(today)}。请对照当前时间自行判断这些事离现在有多久，不要默认它们就发生在今天。）\n`;
@@ -420,6 +427,7 @@ export const buildLifeRecordInjection = async (
     if (moduleActive('med')) tools.push(`- TA 明确说吃了什么药 → \`[[LIFE:MED|药名]]\``);
     if (moduleActive('expense')) tools.push(`- TA 明确说花了多少钱买什么 → \`[[LIFE:EXPENSE|金额|用途]]\`（金额是纯数字）`);
     if (moduleActive('exercise')) tools.push(`- TA 明确说做了什么运动 → \`[[LIFE:EXERCISE|运动|时长]]\`（时长可省略）`);
+    if (moduleActive('sleep')) tools.push('- TA 明确给出自己的已完成睡眠起止时间并希望记录时 → `[[LIFE:SLEEP|入睡ISO时间|醒来ISO时间|备注]]`。时间须含完整日期，例如 2026-10-15T23:30:00+08:00；记录归醒来日期，不能猜测时间、阶段或伪称读取了手表。');
     if (tools.length > 0 && !forFirePack) {
         s += `**代记工具**：只有当 ${userName} 在对话中**明确说出**以下事实时，才单独起一行输出对应指令、帮 TA 顺手记一笔（一次一条）：\n${tools.join('\n')}\n`;
         s += `TA 只是暗示、开玩笑、或在说过去 / 别人的事时，一律不要记录。记录成功后系统会插入一张卡片，TA 可以确认或否决；被否决说明你理解错了。平时不要把这些指令挂在嘴边，也不要替 TA 补记你只是猜测的事。\n`;
@@ -468,6 +476,9 @@ const parseLifeDirective = (verb: string, args: string[]): LifeDirective | null 
             if (isNaN(amount) || amount <= 0) return null;
             return { module: 'expense', kind: 'expense', payload: { amount, note } };
         }
+        case 'SLEEP': {
+            try { return {module:'sleep',kind:'session',payload:sleepPayload(args[0] || '',args[1] || '',args[2] || '', '聊天代记')}; } catch { return null; }
+        }
         case 'EXERCISE': {
             const activity = (args[0] || '').trim();
             const duration = (args[1] || '').trim();
@@ -486,6 +497,7 @@ const findDuplicate = async (
     const byName = (r: LifeRecord) => ({ byName: r.recordedBy === 'user' ? '你自己' : (r.recordedByName || '其他角色') });
     const eff = effective(records);
     switch (d.module) {
+        case 'sleep': { const rec=eff.find(r=>r.module==='sleep' && sameSleep(r.payload,d.payload)); return rec ? byName(rec) : null; }
         case 'period': {
             // 同日同类兜底（先于状态机）：今天已经有同类事件就绝不再写一条。
             // 状态机有判不出重复的盲区——比如 start → 误记了同日 end → 模型下轮又发
@@ -598,6 +610,7 @@ export const executeLifeDirectives = async (
         const args = argStr ? argStr.split('|').slice(1).map(s => s.trim()) : [];
         const d = parseLifeDirective(verb, args);
         if (!d) continue;
+        const recordDate=d.module==='sleep' ? sleepDate(d.payload as any) : today;
         // 记不成的也计数：连打十几条时提示同样会刷屏
         executed++;
 
@@ -622,7 +635,7 @@ export const executeLifeDirectives = async (
                     charId: char.id, role: 'assistant', type: 'life_card',
                     content: `[生活记录：${summary}（已有记录，未重复添加）]`,
                     metadata: withInherited({
-                        module: d.module, kind: d.kind, summary, dateStr: today,
+                        module: d.module, kind: d.kind, summary, dateStr: recordDate,
                         recordedByName: char.name, duplicate: true, duplicateBy: dup.byName,
                     }),
                 }));
@@ -647,7 +660,7 @@ export const executeLifeDirectives = async (
 
             const record: LifeRecord = {
                 id: `life-${Date.now()}-${Math.floor(Math.random() * 1e4)}`,
-                module: d.module, kind: d.kind, date: today, timestamp: Date.now(),
+                module: d.module, kind: d.kind, date: recordDate, timestamp: Date.now(),
                 payload: d.payload,
                 recordedBy: char.id, recordedByName: char.name,
                 reviewStatus: 'active',
@@ -661,7 +674,7 @@ export const executeLifeDirectives = async (
                 content: `[生活记录：${summary}]`,
                 metadata: withInherited({
                     recordId: record.id, module: d.module, kind: d.kind, summary,
-                    dateStr: today, recordedByName: char.name, reviewStatus: 'active',
+                    dateStr: recordDate, recordedByName: char.name, reviewStatus: 'active',
                 }),
             }));
             addToast(`${char.name} 帮你记录了「${summary}」`, 'success');

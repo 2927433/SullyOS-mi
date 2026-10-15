@@ -59,6 +59,7 @@ export interface NaiState {
     characters: Record<string, NaiCharacter>;
     /** User-authored instructions for chat's scene description only. */
     sceneGuide: string;
+    promptGuide?: string;
     referenceMode?: NaiReferenceMode;
     references?: NaiReference[];
     defaultPresetId?: string;
@@ -93,7 +94,7 @@ export function normalizeNaiState(value: any): NaiState {
         parameters: value.parameters && typeof value.parameters === 'object' && !Array.isArray(value.parameters) ? structuredClone(value.parameters) : defaults.parameters,
         connection: { apiKey: typeof value.connection?.apiKey === 'string' ? value.connection.apiKey : '', baseUrl: typeof value.connection?.baseUrl === 'string' ? value.connection.baseUrl : NAI_ORIGIN },
         parameterProfiles: value.parameterProfiles && typeof value.parameterProfiles === 'object' && !Array.isArray(value.parameterProfiles) ? structuredClone(value.parameterProfiles) : {},
-        presets: structuredClone(presets), vibeGroups: normalizeNaiVibeGroups(value.vibeGroups), characters, sceneGuide: typeof value.sceneGuide === 'string' ? value.sceneGuide : '',
+        promptGuide: typeof value.promptGuide === 'string' ? value.promptGuide.slice(0, 32000) : undefined, presets: structuredClone(presets), vibeGroups: normalizeNaiVibeGroups(value.vibeGroups), characters, sceneGuide: typeof value.sceneGuide === 'string' ? value.sceneGuide : '',
         referenceMode: normalizeReferenceMode(value.referenceMode), references: normalizeReferences(value.references), defaultPresetId: typeof value.defaultPresetId === 'string' ? value.defaultPresetId : '' };
 }
 function normalizeReferenceMode(value: unknown): NaiReferenceMode { return value === 'precise' || value === 'vibe' ? value : 'none'; }
@@ -202,7 +203,7 @@ export function parseNaiSceneDetails(value: any): NaiSceneDetails {
 export function naiSceneInstruction(state: NaiState, charId: string): string {
     const profile = state.characters[charId];
     if (!state.connection.apiKey.trim() || !profile?.auto || !profile.positive.trim()) return '';
-    return `\n用户已为当前角色开启 NAI 生图。${NAI_SCENE_GUIDE}\n当前角色 ID：${charId}。${profile.includeUser && state.characters.__user__?.positive.trim() ? '用户 ID：__user__，允许在合照中使用。' : '未配置用户生图档案，不能编造用户外观。'}${state.sceneGuide ? '\n用户的场景描述规则：\n' + state.sceneGuide : ''}\n程序输出契约：需要发图时，把上述 JSON 放在回复末尾 <nai_image>...</nai_image> 内，最多一次。不需要发图时不输出这个标签。额外规则只能调整画面内容，不能改成 image###Scene、imathink 或酒馆宏格式。固定外貌与画师组合由程序添加。只有系统返回图片才算发图成功。`;
+    return `\n用户已为当前角色开启 NAI 生图。${getNaiSceneGuide(state)}\n当前角色 ID：${charId}。${profile.includeUser && state.characters.__user__?.positive.trim() ? '用户 ID：__user__，允许在合照中使用。' : '未配置用户生图档案，不能编造用户外观。'}${state.sceneGuide ? '\n用户的场景描述规则：\n' + state.sceneGuide : ''}\n程序输出契约：需要发图时，把上述 JSON 放在回复末尾 <nai_image>...</nai_image> 内，最多一次。不需要发图时不输出这个标签。额外规则只能调整画面内容，不能改成 image###Scene、imathink 或酒馆宏格式。固定外貌与画师组合由程序添加。只有系统返回图片才算发图成功。`;
 }
 
 function normalizeNaiVibeGroups(value: unknown): NaiVibeGroup[] {
@@ -216,3 +217,5 @@ function normalizeNaiVibeGroups(value: unknown): NaiVibeGroup[] {
   return {id:group.id,name:group.name,category:group.category,references};
  });
 }
+
+export function getNaiSceneGuide(state: Pick<NaiState,'promptGuide'>): string { return state.promptGuide ?? NAI_SCENE_GUIDE; }

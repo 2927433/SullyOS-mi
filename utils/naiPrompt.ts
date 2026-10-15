@@ -16,9 +16,9 @@ export function currentNaiTurn(messages: Array<{ role: string; type?: string; co
 import { safeResponseJson, extractContent } from './safeApi';
 import { NAI_SCENE_GUIDE, parseNaiSceneDetails, type NaiSceneDetails } from './nai';
 
-export async function draftNaiPrompt(input: string, api: APIConfig, char: CharacterProfile | undefined, user: UserProfile, extraRules: string, signal?: AbortSignal): Promise<{ scene: string; details: NaiSceneDetails }> {
+export async function draftNaiPrompt(input: string, api: APIConfig, char: CharacterProfile | undefined, user: UserProfile, extraRules: string, signal?: AbortSignal, guide = NAI_SCENE_GUIDE): Promise<{ scene: string; details: NaiSceneDetails }> {
     if (!api?.apiKey || !api.baseUrl || !api.model) throw new Error('整理提示词需要先配置小手机的提示词 API；也可以直接输入英文提示词生图');
-    const instruction = `${NAI_SCENE_GUIDE}\n当前角色 ID：${char?.id || '未选择角色'}。用户 ID：__user__。${extraRules ? '\n用户额外规则：' + extraRules : ''}\n这次是用户手动请求整理提示词，必须只输出一份 JSON，不要发起生图。额外规则只调整画面，不能改变 scene/negative/characters 的 JSON 格式，不使用酒馆宏。只输出公开的画面描述，不输出分析或思考。`;
+    const instruction = `${guide}\n当前角色 ID：${char?.id || '未选择角色'}。用户 ID：__user__。${extraRules ? '\n用户额外规则：' + extraRules : ''}\n这次是用户手动请求整理提示词，必须只输出一份 JSON，不要发起生图。额外规则只调整画面，不能改变 scene/negative/characters 的 JSON 格式，不使用酒馆宏。只输出公开的画面描述，不输出分析或思考。`;
     const task = [{ role: 'system' as const, content: instruction }, { role: 'user' as const, content: input }];
     const messages = task; // Image translation uses no persona, worldbook, or long-term memory.
     const response = await fetch(`${api.baseUrl.replace(/\/+$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${api.apiKey}` }, body: JSON.stringify({ model: api.model, messages, stream: false, max_tokens: 2000, temperature: 0.3 }), signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(90000)]) : AbortSignal.timeout(90000) });

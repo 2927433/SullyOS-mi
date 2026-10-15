@@ -36,7 +36,7 @@ import { prepareInboxBeforeChat } from '../utils/activeMsgRuntime';
 import { hasUnansweredUserTurn, withChatContinuation } from '../utils/chatContinuation';
 import { assertChatHasDialogue } from '../utils/chatRequestGuard';
 import { applyAssistantPostProcessing, type XhsCaches } from '../utils/applyAssistantPostProcessing';
-import { buildNaiRequest, extractNaiScene, naiSceneInstruction } from '../utils/nai';
+import { getNaiSceneGuide, buildNaiRequest, extractNaiScene, naiSceneInstruction } from '../utils/nai';
 import { generateNaiImages, loadNaiState, saveNaiImageToAlbum } from '../utils/naiService';
 import {
     computeStreamPreviewBubbles,
@@ -2118,7 +2118,7 @@ export const useChatAI = ({
                 if (naiSceneInstruction(latestNai, char.id)) {
                     try {
                         addToast('角色正在使用 NAI 生图，请保持页面打开', 'info');
-                        const compiled = await replyStep(() => draftNaiPrompt(currentNaiTurn(contextMsgs, naiReply.text), resolveNaiPromptApi(latestNai, apiConfig), char, userProfile, latestNai.sceneGuide, replyRun.signal));
+                        const compiled = await replyStep(() => draftNaiPrompt(currentNaiTurn(contextMsgs, naiReply.text), resolveNaiPromptApi(latestNai, apiConfig), char, userProfile, latestNai.sceneGuide, replyRun.signal, getNaiSceneGuide(latestNai)));
                         const request = buildNaiRequest({ ...latestNai, parameters: { ...latestNai.parameters, n_samples: 1 } }, char.id, compiled.scene, '', undefined, compiled.details);
                         const generated = await replyStep(async () => generateNaiImages(latestNai, request, replyRun.signal, { useSavedReferences: true, charId: char.id, omitPeople: !!compiled.details?.photoType && compiled.details.photoType !== 'selfie' }));
                         for (const image of generated) {
