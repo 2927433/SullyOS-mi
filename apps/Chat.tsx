@@ -51,6 +51,8 @@ import {resolveDecorationTheme} from '../utils/chatDecoration';
 import {DecorationTab} from '../components/chat/ChatDecorationPanel';
 import ChatAppearanceWardrobe from '../components/chat/ChatAppearanceWardrobe';
 import ChatInputArea from '../components/chat/ChatInputArea';
+import NaiWorkspace from '../components/nai/NaiWorkspace';
+import { saveNaiImageToAlbum } from '../utils/naiService';
 import ConfirmDialog from '../components/os/ConfirmDialog';
 import { loadChatInputPreferences, saveChatInputPreferences } from '../utils/chatInputPreferences';
 import InstantChatRouteNotice from '../components/chat/InstantChatRouteNotice';
@@ -178,6 +180,8 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
     const [collaborationPreviewAssetId, setCollaborationPreviewAssetId] = useState<string | null>(null);
     const [memoryRepairOpen, setMemoryRepairOpen] = useState(false);
     const [favoritesOpen, setFavoritesOpen] = useState(false);
+    const [naiOpen, setNaiOpen] = useState(false);
+    useEffect(() => setNaiOpen(false), [activeCharacterId]);
     
     // Emoji State
     const [emojis, setEmojis] = useState<Emoji[]>([]);
@@ -3541,7 +3545,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
         active: (activeApp === AppID.Chat || !!homePhone) && !!char,
         blocked: isInputFocused || !!input.trim() || showPanel !== 'none' || modalType !== 'none'
             || selectionMode || isSummarizing || collaborationOpen || memoryRepairOpen || favoritesOpen
-            || showProactiveModal || showActiveMsg2Modal || showThinkingChainModal
+            || naiOpen || showProactiveModal || showActiveMsg2Modal || showThinkingChainModal
             || mcdAppOpen || luckinAppOpen || showForwardModal,
         generating: isTyping || instantChatPending || isProactiveComposing,
         onGenerate: handleManualTrigger,
@@ -3855,6 +3859,13 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
                 message="检测到分享链接，要关闭自动转卡片吗？关闭后，本条及之后的链接会按原文发送，方便角色用你配置的 MCP 读取。保留卡片也会带上原链接。两类解析可在加号 → 设置中分别调整。"
                 confirmText="关闭，发送原文" cancelText="保留卡片"
                 onConfirm={() => answerLinkCard(false)} onCancel={() => answerLinkCard(true)} />
+            {naiOpen && char && <NaiWorkspace key={char.id} characterId={char.id} onClose={() => setNaiOpen(false)} onSendToChat={async image => {
+                const charId = char.id;
+                const id = await DB.saveMessage({ charId, role: 'assistant', type: 'image', content: image.token,
+                    metadata: { nai: { generationId: image.generationId, model: image.request.model, seed: image.request.parameters.seed } } });
+                try { await saveNaiImageToAlbum(image, charId, id); } catch { addToast('图片已发到聊天，相册保存失败，可在生图面板保存原图', 'info'); }
+                await reloadMessages(visibleCountRef.current);
+            }} />}
             <ChatModals
                 compactHome={!!homePhone}
                 modalType={modalType} setModalType={setModalType}
@@ -4419,6 +4430,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
                     showPanel={showPanel} setShowPanel={setShowPanel}
                     onSend={handleSendCallback}
                     onSendFakeVoice={async text => await handleSendText(text, 'text', { fakeVoice: true })}
+                    onOpenNai={() => setNaiOpen(true)}
                     onGenerate={handleManualTrigger}
                     sendButtonGenerates={inputPreferences.sendButtonGenerates}
                     enterToSend={inputPreferences.enterToSend}

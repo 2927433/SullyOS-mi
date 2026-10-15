@@ -28,6 +28,7 @@ interface ChatInputAreaProps {
     setShowPanel: (v: 'none' | 'actions' | 'emojis' | 'chars') => void;
     onSend: () => void;
     onSendFakeVoice?: (text: string) => Promise<boolean>;
+    onOpenNai?: () => void;
     /** 私聊可把底部发送按钮切换为手动生成入口；其他复用方保持原行为。 */
     sendButtonGenerates?: boolean;
     enterToSend?: boolean;
@@ -88,7 +89,7 @@ interface ChatInputAreaProps {
 
 const ChatInputArea: React.FC<ChatInputAreaProps> = ({
     input, setInput, isTyping, selectionMode, compactHome=false,
-    showPanel, setShowPanel, onSend, onSendFakeVoice, onDeleteSelected, onForwardSelected, onFavoriteSelected, favoriteSelectedCount = 0, selectedCount,
+    showPanel, setShowPanel, onSend, onSendFakeVoice, onOpenNai, onDeleteSelected, onForwardSelected, onFavoriteSelected, favoriteSelectedCount = 0, selectedCount,
     sendButtonGenerates = false, enterToSend = true, onGenerate,
     autoReplyEnabled = false, autoReplySeconds = null, onCancelAutoReply, onInputFocusChange,
     emojis, characters = [], activeCharacterId = '', onCharSelect = () => {},
@@ -488,6 +489,10 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
 
     // Keep one ordered list so removed or added entries cannot leave holes between pages.
     const actionTiles = [
+        ...(onOpenNai ? [<button key="nai" onClick={() => { setShowPanel('none'); onOpenNai(); }} className={`flex flex-col items-center gap-2 active:scale-95 transition-transform ${isDiscordStyle ? 'text-slate-200' : 'text-slate-600'}`}>
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-violet-50 text-violet-500 border border-violet-100"><Image className="w-6 h-6" weight="bold" /></div>
+            <span className="text-xs font-bold">NAI 生图</span>
+        </button>] : []),
         ...(onSendFakeVoice ? [<button key="fake-voice" onClick={() => { setShowPanel('none'); setFakeVoiceOpen(true); }} className={`flex flex-col items-center gap-2 active:scale-95 transition-transform ${acnh ? 'text-[#725d42]' : isDiscordStyle ? 'text-slate-200' : 'text-slate-600'}`}>
             <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm border ${isDiscordStyle ? 'bg-slate-800 text-sky-300 border-sky-400/20' : 'bg-sky-50 text-sky-500 border-sky-100'}`}>
                 <ChatCircleDots className="w-6 h-6" weight="bold" />

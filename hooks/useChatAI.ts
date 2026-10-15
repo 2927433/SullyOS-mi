@@ -35,6 +35,8 @@ import { prepareInboxBeforeChat } from '../utils/activeMsgRuntime';
 import { hasUnansweredUserTurn, withChatContinuation } from '../utils/chatContinuation';
 import { assertChatHasDialogue } from '../utils/chatRequestGuard';
 import { applyAssistantPostProcessing, type XhsCaches } from '../utils/applyAssistantPostProcessing';
+import { buildNaiRequest, extractNaiScene, naiSceneInstruction } from '../utils/nai';
+import { generateNaiImages, loadNaiState, saveNaiImageToAlbum } from '../utils/naiService';
 import {
     computeStreamPreviewBubbles,
     extractStreamingEmbeddedThinking,
@@ -810,6 +812,8 @@ export const useChatAI = ({
             // 握手探测还没回来）就当场探一次（带 3 秒超时），探到旧版 → outdated，探不到 →
             // unverified，两种都留在本地跑。只剩恢复期提示（afterglow）的回合不需要信封，
             // 任何 Worker 都跑得了，不探也不拦。
+            const naiStateForTurn = await replyStep(async () => loadNaiState());
+            const naiInstruction = naiSceneInstruction(naiStateForTurn, char.id);
             const instantChatReadiness = await replyStep(async () => resolveInstantChatReadiness(char, {
                 ensureBundleVersion: sarModulePlan.requiresEnvelope,
             }));
@@ -820,7 +824,7 @@ export const useChatAI = ({
                 : instantChatReadiness.workerBundleCurrent === false ? 'sar-module-worker-outdated'
                     : instantChatReadiness.workerBundleCurrent === undefined ? 'sar-module-worker-unverified'
                         : null;
-            const instantChatVeto: string | null = sarWorkerVeto
+            const instantChatVeto: string | null = (naiInstruction ? 'nai-foreground' : null) ?? sarWorkerVeto
                 ?? (luckinChatOn ? 'luckin-chat'
                 : mcdMiniOpen ? 'mcd'
                     : luckinMiniOpen ? 'luckin'
@@ -838,7 +842,9 @@ export const useChatAI = ({
             if (instantChatOn && !instantChatRoute) {
                 const skipReason = instantChatVeto;
                 console.warn(
-                    skipReason === 'sar-module-worker-outdated'
+                    skipReason === 'nai-foreground'
+                        ? '[NAI] 角色自动生图已开启，本轮在前台完成；NAI Key 不发送到主动消息 Worker'
+                        : skipReason === 'sar-module-worker-outdated'
                         ? '[AmsgInstantChat] 这一轮没上云（SAR 模块生效中，那台 Worker 还是旧 bundle、拆不了模块的回复信封），本地生成。去设置页点「更新 Worker」'
                         : skipReason === 'sar-module-worker-unverified'
                         ? '[AmsgInstantChat] 这一轮没上云（SAR 模块生效中，没问到那台 Worker 的版本、确认不了它认得模块的回复信封），本地生成。连上云端探到版本后会自己回到云端'
@@ -940,6 +946,7 @@ export const useChatAI = ({
                     // 生成前收进来的主动消息落在用户刚发的那句之后：该回的是用户那句。
                     unansweredUserTurn: hasUnansweredUserTurn(currentMsgs, contextMsgs),
                 });
+            if (naiInstruction && !payload.flags.promptBuildSkipped) fullMessages.push({ role: 'system', content: naiInstruction });
             const promptBuildSkipped = payload.flags.promptBuildSkipped;
             if (payload.flags.mcdActive) {
                 console.log(`🍔 [MCD-MiniApp] 注入协同点餐上下文 step=${mcdMiniSnap?.step} cartItems=${mcdMiniSnap?.cart?.length || 0} menuItems=${mcdMiniSnap?.menuMeals ? Object.keys(mcdMiniSnap.menuMeals).length : 0} nutrition=${mcdMiniSnap?.nutritionData ? mcdMiniSnap.nutritionData.length : 0}字`);
@@ -1331,7 +1338,7 @@ export const useChatAI = ({
             // 每次 onDelta 基于累计全文全量重算（safeFetchJson 重试会重开流，天然重置）；
             // 正文尾句和思考内容只在累计文本确实变化时触发重渲染。
             // SAR 的正文包在结构化容器里，流式阶段不能把 TRUE/SURFACE 控制标签闪给用户。
-            const streamUiEligible = !!userStream && !toolModeActive && !bilingualActive && !sarModulePlan.requiresEnvelope;
+            const streamUiEligible = !!userStream && !toolModeActive && !bilingualActive && !sarModulePlan.requiresEnvelope && !naiInstruction;
             const streamPreviewEligible = streamUiEligible;
             const streamThinkingEligible = streamUiEligible && payload.flags.thinkingActive;
             // 预览真的上过屏才置 true → 后处理落库时跳过拟人打字延迟（instantRender），
@@ -2065,7 +2072,8 @@ export const useChatAI = ({
                 commentAuthorNameCache: commentAuthorNameCacheRef.current,
                 commentParentIdCache: commentParentIdCacheRef.current,
             };
-            await replyStep(async () => applyAssistantPostProcessing(sarReply.canonical, {
+            const naiReply = extractNaiScene(sarReply.canonical);
+            if (naiReply.text.trim()) await replyStep(async () => applyAssistantPostProcessing(naiReply.text, {
                 replyRun,
                 char,
                 userProfile,
@@ -2103,6 +2111,29 @@ export const useChatAI = ({
                 directives: [],
                 sarModuleSurface: assistantSurfaceMeta,
             }));
+            if (naiInstruction && naiReply.scene) {
+                // Re-read permission after the LLM reply, in case the user disabled it meanwhile.
+                const latestNai = await replyStep(async () => loadNaiState());
+                if (naiSceneInstruction(latestNai, char.id)) {
+                    try {
+                        addToast('角色正在使用 NAI 生图，请保持页面打开', 'info');
+                        const request = buildNaiRequest({ ...latestNai, parameters: { ...latestNai.parameters, n_samples: 1 } }, char.id, naiReply.scene);
+                        const generated = await replyStep(async () => generateNaiImages(latestNai, request, replyRun.signal));
+                        for (const image of generated) {
+                            const id = await replyStep(async () => replyRun.saveMessage({ charId: char.id, role: 'assistant', type: 'image', content: image.token,
+                                metadata: { nai: { generationId: image.generationId, model: request.model, seed: request.parameters.seed } } }));
+                            try { await replyStep(async () => saveNaiImageToAlbum(image, char.id, id)); }
+                            catch (error) { replyRun.check(); addToast('图片已保存在聊天，相册保存失败', 'info'); }
+                        }
+                        setMessages(await replyStep(async () => DB.getRecentMessagesByCharId(char.id, 200)));
+                    } catch (error) {
+                        replyRun.check();
+                        const reason = error instanceof Error ? error.message : '请求失败';
+                        await replyStep(async () => replyRun.saveMessage({ charId: char.id, role: 'system', type: 'text', content: `[NAI 生图失败：${reason}；未自动重试，可从＋菜单手动生图]` }));
+                        setMessages(await replyStep(async () => DB.getRecentMessagesByCharId(char.id, 200)));
+                    }
+                }
+            }
             replyRun.markCompleted();
             // 最后一批正式消息已交给 setMessages；同一轮更新撤掉预览，不再逐条补弹。
             setStreamingBubbles([]);

@@ -18,6 +18,10 @@ import React, { useEffect, useState } from 'react';
 import { AMSG_INSTANT_CHAT_ROUTE_EVENT, type InstantChatRouteDetail } from '../../utils/amsgInstantChat';
 
 const NOTICES: Record<string, { title: string; hint: string }> = {
+    'nai-foreground': {
+        title: '本轮包含 NAI 生图能力',
+        hint: '在前台完成，请保持网页打开',
+    },
     'worker-outdated': {
         title: '这一轮在本地生成',
         hint: '云端那台 Worker 跑不动这条路，去设置里更新一下',

@@ -1,0 +1,150 @@
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useOS } from '../../context/OSContext';
+import TokenImg from '../os/TokenImg';
+import { shareOrDownloadBlob } from '../../utils/shareExport';
+import { NAI_MODELS, buildNaiRequest, emptyNaiCharacter, exportNaiLibrary, importNaiLibrary, parseNaiRequest, defaultNaiState, type NaiPreset, type NaiState } from '../../utils/nai';
+import { checkNaiConnection, checkNaiSchema, generateNaiImages, loadNaiState, saveNaiState, saveNaiImageToAlbum, type NaiGeneratedImage } from '../../utils/naiService';
+import { readNaiPng } from '../../utils/naiPng';
+import './nai.css';
+
+type Tab = 'generate' | 'presets' | 'character' | 'connection';
+const errorText = (error: unknown) => (error as any)?.name === 'AbortError' ? '已取消等待。已发出的 NAI 请求仍可能计费，请检查后再决定是否重发。' : error instanceof Error ? error.message : '操作失败，请重试';
+export default function NaiWorkspace({ characterId, initialTab = 'generate', onClose, onSendToChat }: {
+    characterId?: string; initialTab?: Tab; onClose: () => void; onSendToChat?: (image: NaiGeneratedImage) => Promise<void>;
+}) {
+    const { characters, addToast } = useOS();
+    const [state, setState] = useState<NaiState | null>(null);
+    const [tab, setTab] = useState<Tab>(initialTab);
+    const [selectedChar, setSelectedChar] = useState(characterId || characters[0]?.id || '');
+    const [scene, setScene] = useState('');
+    const [negative, setNegative] = useState('');
+    const [randomRound, setRandomRound] = useState(0);
+    const [rawMode, setRawMode] = useState(false);
+    const [raw, setRaw] = useState('');
+    const [paramsText, setParamsText] = useState('');
+    const [error, setError] = useState('');
+    const [notice, setNotice] = useState('');
+    const [busy, setBusy] = useState(false);
+    const busyRef = useRef(false);
+    const abortRef = useRef<AbortController>();
+    const [images, setImages] = useState<NaiGeneratedImage[]>([]);
+    const [sent, setSent] = useState<Set<string>>(new Set());
+    const [category, setCategory] = useState('');
+    const [editing, setEditing] = useState<NaiPreset>({ id: '', name: '', category: '', positive: '', negative: '' });
+    const importRef = useRef<HTMLInputElement>(null);
+    const requestImportRef = useRef<HTMLInputElement>(null);
+    const pngImportRef = useRef<HTMLInputElement>(null);
+    useEffect(() => {
+        let active = true;
+        void loadNaiState().then(value => { if (active) { setState(value); setParamsText(JSON.stringify(value.parameters, null, 2)); } }).catch(e => { if (active) setError(errorText(e)); });
+        return () => { active = false; abortRef.current?.abort(); };
+    }, []);
+    const profile = state?.characters[selectedChar] || emptyNaiCharacter();
+    const setProfile = (patch: Partial<typeof profile>) => setState(current => current && ({ ...current, characters: { ...current.characters, [selectedChar]: { ...(current.characters[selectedChar] || emptyNaiCharacter()), ...patch } } }));
+    const setParameter = (key: string, value: unknown) => setState(current => current && ({ ...current, parameters: { ...current.parameters, [key]: value } }));
+    const preview = useMemo(() => {
+        try { return { request: state ? rawMode ? parseNaiRequest(raw) : buildNaiRequest(state, selectedChar, scene, negative) : null, error: '' }; }
+        catch (e) { return { request: null, error: errorText(e) }; }
+    }, [state, rawMode, raw, selectedChar, scene, negative, randomRound]);
+    const action = async (fn: () => Promise<void>) => {
+        if (busyRef.current) return;
+        busyRef.current = true; setBusy(true); setError(''); setNotice('');
+        try { await fn(); } catch (e) { setError(errorText(e)); }
+        finally { busyRef.current = false; setBusy(false); }
+    };
+    const save = () => action(async () => { if (state) { await saveNaiState(state); setNotice('设置已保存到本机，完整备份会包含生图资料。'); } });
+    const generate = () => action(async () => {
+        if (!state || !preview.request) throw new Error(preview.error || '请填写生图内容');
+        if (!rawMode && !scene.trim()) throw new Error('请输入本次画面内容');
+        await saveNaiState(state);
+        abortRef.current = new AbortController();
+        setNotice('正在向 NAI 请求图片，请保持页面打开…');
+        const generated = await generateNaiImages(state, preview.request, abortRef.current.signal);
+        setImages(previous => [...generated, ...previous]);
+        // Keep the exact sent payload including its resolved seed for inspection/reproduction.
+        setRaw(JSON.stringify(preview.request, null, 2));
+        setRandomRound(value => value + 1);
+        let failed = false;
+        for (const image of generated) {
+            if (selectedChar) { try { await saveNaiImageToAlbum(image, selectedChar); } catch { failed = true; } }
+        }
+        setNotice(failed ? '图片已生成，但相册保存失败。请先保存原图，避免丢失。' : selectedChar ? '已生成并保存到所选角色的相册。' : '已生成，请保存原图。');
+    });
+    const importFile = (kind: 'library' | 'request' | 'png', file?: File) => action(async () => {
+        if (!file || !state) return;
+        if (kind === 'library') {
+            const next = importNaiLibrary(await file.text(), state);
+            if (!window.confirm('导入将替换当前生图提示词库、角色生图档案和参数。已保存的聊天与图片不变。继续？')) return;
+            setState(next); setParamsText(JSON.stringify(next.parameters, null, 2)); setNotice('资料已载入，角色自动生图保持关闭。请检查后点保存。');
+        } else {
+            const request = kind === 'png' ? await readNaiPng(file) : parseNaiRequest(await file.text());
+            setRaw(JSON.stringify(request, null, 2)); setRawMode(true); setTab('generate'); setNotice('已载入完整请求模式；将原样发送，不叠加画师组合或角色档案。');
+        }
+    });
+    const changeModel = (model: string) => setState(current => {
+        if (!current) return current;
+        const parameterProfiles = { ...current.parameterProfiles, [current.model]: current.parameters };
+        const parameters = structuredClone(parameterProfiles[model] || defaultNaiState().parameters);
+        setParamsText(JSON.stringify(parameters, null, 2));
+        return { ...current, model, parameters, parameterProfiles };
+    });
+    return <div className="nai-workspace" role="dialog" aria-modal="true" aria-label="NovelAI 生图">
+        <header className="nai-head"><div><h2>NovelAI 生图</h2><small>画面 · 画师组合 · 角色档案</small></div><div className="nai-row"><button disabled={busy || !state} onClick={() => void save()}>保存设置</button><button disabled={busy} onClick={onClose}>关闭</button></div></header>
+        <nav className="nai-tabs">{([['generate', '生图'], ['presets', '画师组合'], ['character', '角色外观'], ['connection', '连接设置']] as [Tab, string][]).map(([key, title]) => <button key={key} disabled={busy} data-active={tab === key} onClick={() => setTab(key)}>{title}</button>)}</nav>
+        {error && <div className="nai-error" role="alert">{error}</div>}
+        {notice && <div className="nai-head nai-note" role="status">{notice}</div>}
+        <main className="nai-body"><div className="nai-content">
+            {!state ? <p className="nai-note">{error ? '配置读取失败，关闭后重试；没有覆盖原配置。' : '正在读取本机生图资料…'}</p> : <>
+            {(tab === 'generate' || tab === 'character') && <section className="nai-card"><label>归属角色<select disabled={busy || !!characterId} value={selectedChar} onChange={e => setSelectedChar(e.target.value)}><option value="">不选择角色</option>{characters.map(char => <option key={char.id} value={char.id}>{char.name}</option>)}</select></label><p className="nai-note">固定特征按角色 ID 保存；画师组合与角色档案可以在不同聊天中复用。</p></section>}
+            {tab === 'connection' && <section className="nai-card">
+                <label>NAI Persistent API Token<input type="password" autoComplete="new-password" spellCheck={false} disabled={busy} value={state.connection.apiKey} onChange={e => setState({ ...state, connection: { ...state.connection, apiKey: e.target.value } })} placeholder="在自己的设备里填写" /></label>
+                <label>NAI 服务地址<input disabled={busy} value={state.connection.baseUrl} onChange={e => setState({ ...state, connection: { ...state.connection, baseUrl: e.target.value } })} /></label>
+                <p className="nai-note">默认直连 image.novelai.net。自定义地址需要兼容 NAI 路径，并会收到你的 Key；只填自己信任的服务。保存后 Key 在本机，完整备份也可能含 Key；下方单独导出的生图资料库不含 Key。</p>
+                <div className="nai-row"><button disabled={busy} onClick={() => void action(async () => { await checkNaiConnection(state.connection); setNotice('NAI 连接成功，订阅接口已响应。没有进行收费生图。'); })}>测试连接</button><button disabled={busy} onClick={() => void action(async () => { const schema = await checkNaiSchema(); setNotice(`已读取官方生图接口定义（${schema.fields.length} 项参数）。${schema.modelIds.length ? '模型枚举：' + schema.modelIds.join(', ') : '官方未提供生图模型枚举；可选内置模型或填写官方 ID。'}`); })}>检查官方接口</button></div>
+                <label>生图场景规则（可选）<textarea disabled={busy} rows={5} value={state.sceneGuide} onChange={e => setState({ ...state, sceneGuide: e.target.value })} placeholder="只用于角色自动描述场景，例如镜头与构图习惯。不需要放 API Key。" /></label>
+                <p className="nai-note">这是生图专用规则。画师串放“画师组合”，固定发色、瞳色等放“角色外观”；无需额外安装聊天世界书。</p>
+                <div className="nai-row"><button disabled={busy} onClick={() => void action(async () => { await shareOrDownloadBlob({ blob: new Blob([exportNaiLibrary(state)], { type: 'application/json' }), fileName: 'SullyOS-NAI-library.json', preferDownloadOnWeb: true }); })}>导出生图资料（不含 Key）</button><button disabled={busy} onClick={() => importRef.current?.click()}>导入生图资料</button></div>
+            </section>}
+            {tab === 'character' && <section className="nai-card">
+                <label>角色固定正面提示词<textarea disabled={busy || !selectedChar} rows={5} value={profile.positive} onChange={e => setProfile({ positive: e.target.value })} placeholder="1boy, black hair, blue eyes, ..." /></label>
+                <label>角色固定负面提示词<textarea disabled={busy || !selectedChar} rows={3} value={profile.negative} onChange={e => setProfile({ negative: e.target.value })} /></label>
+                <label>该角色使用的画师组合<select disabled={busy || !selectedChar} value={profile.presetId} onChange={e => setProfile({ presetId: e.target.value })}><option value="">不使用组合</option>{state.presets.map(p => <option key={p.id} value={p.id}>{p.category || '未分类'} / {p.name}</option>)}</select></label>
+                <label className="nai-check"><input type="checkbox" disabled={busy || !selectedChar || !profile.positive.trim()} checked={profile.auto} onChange={e => setProfile({ auto: e.target.checked })} />允许角色在聊天回复时判断并生图</label>
+                <p className="nai-note">开启后，每轮最多触发一次、每次一张，可能消耗 NAI Anlas；失败不自动重发。该角色回复会在前台完成，请保持网页打开。关闭后不发起新的自动请求。固定词不会被角色改写，但模型仍可能画错特征。</p>
+            </section>}
+            {tab === 'presets' && <>
+                <section className="nai-card"><h3>分类与组合</h3><select aria-label="筛选画师分类" value={category} onChange={e => setCategory(e.target.value)}><option value="">全部分类</option>{[...new Set(state.presets.map(p => p.category || '未分类'))].map(c => <option key={c}>{c}</option>)}</select>{state.presets.filter(p => !category || (p.category || '未分类') === category).map(p => <div key={p.id} className="nai-preset"><span>{p.category || '未分类'} / {p.name}</span><button disabled={busy} onClick={() => setEditing({ ...p })}>编辑</button></div>)}<button disabled={busy} onClick={() => setEditing({ id: '', name: '', category: '', positive: '', negative: '' })}>新建组合</button></section>
+                <section className="nai-card"><label>组合名称<input disabled={busy} value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} /></label><label>分类<input disabled={busy} value={editing.category} onChange={e => setEditing({ ...editing, category: e.target.value })} placeholder="例如厚涂、漫画、清透" /></label><label>正面提示词<textarea disabled={busy} rows={6} value={editing.positive} onChange={e => setEditing({ ...editing, positive: e.target.value })} /></label><label>负面提示词<textarea disabled={busy} rows={5} value={editing.negative} onChange={e => setEditing({ ...editing, negative: e.target.value })} /></label><p className="nai-note">保留原有顺序、权重和标点。需要官网质量词或 UC 词时，把实际词串明确写在这里；不会暗中添加。编辑完成先点“加入资料库”，再保存设置。</p><div className="nai-row"><button disabled={busy || !editing.name.trim()} onClick={() => { const item = { ...editing, id: editing.id || crypto.randomUUID() }; setState({ ...state, presets: [...state.presets.filter(p => p.id !== item.id), item] }); setEditing(item); setNotice('组合已加入待保存资料，请点顶部保存设置。'); }}>加入资料库</button>{editing.id && <button disabled={busy} onClick={() => { if (!window.confirm('删除这套画师组合？')) return; setState({ ...state, presets: state.presets.filter(p => p.id !== editing.id), characters: Object.fromEntries(Object.entries(state.characters).map(([id, p]) => [id, p.presetId === editing.id ? { ...p, presetId: '' } : p])) }); setEditing({ id: '', name: '', category: '', positive: '', negative: '' }); }}>删除组合</button>}</div></section>
+            </>}
+            {tab === 'generate' && <>
+                <section className="nai-card"><label className="nai-check"><input disabled={busy} type="checkbox" checked={rawMode} onChange={e => { if (e.target.checked && !raw && preview.request) setRaw(JSON.stringify(preview.request, null, 2)); setRawMode(e.target.checked); }} />完整请求模式（官网参数复现）</label><div className="nai-row"><button disabled={busy} onClick={() => pngImportRef.current?.click()}>读取 NAI 原始 PNG 参数</button><button disabled={busy} onClick={() => requestImportRef.current?.click()}>导入完整请求 JSON</button></div>
+                {rawMode ? <><textarea aria-label="NAI 完整请求 JSON" disabled={busy} rows={16} value={raw} onChange={e => setRaw(e.target.value)} /><p className="nai-note">完整请求原样发送，不追加角色、画师、质量或负面词。请自行确认其中的角色特征。当前只支持文生图；导入参考图参数需要数据也在请求中，图生图/重绘请用官网。</p></> : <>
+                    <label>模型<select disabled={busy} value={NAI_MODELS.some(m => m.id === state.model) ? state.model : '__custom'} onChange={e => changeModel(e.target.value === '__custom' ? 'nai-diffusion-' : e.target.value)}>{NAI_MODELS.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}<option value="__custom">自定义官方模型 ID</option></select></label>
+                    {!NAI_MODELS.some(m => m.id === state.model) && <label>模型 ID<input disabled={busy} value={state.model} onChange={e => setState({ ...state, model: e.target.value })} /></label>}
+                    <p className="nai-note">模型列表为内置官方名称，并非账号实时拉取；参数按模型分别保存。选中模型不保证订阅具有使用权限。</p>
+                    <label>本次画面内容<textarea disabled={busy} rows={5} value={scene} onChange={e => setScene(e.target.value)} placeholder="在这里写场景、姿势、服装、表情、构图。推荐沿用你在 NAI 官网使用的词。" /></label>
+                    <label>本次额外负面词<textarea disabled={busy} rows={3} value={negative} onChange={e => setNegative(e.target.value)} /></label>
+                    <label>画师组合<select disabled={busy || !selectedChar} value={profile.presetId} onChange={e => setProfile({ presetId: e.target.value })}><option value="">无</option>{state.presets.map(p => <option key={p.id} value={p.id}>{p.category || '未分类'} / {p.name}</option>)}</select></label>
+                    <div className="nai-grid">{([['width', '宽度'], ['height', '高度'], ['steps', 'Steps'], ['scale', 'Guidance'], ['cfg_rescale', 'Guidance Rescale'], ['seed', 'Seed（-1 随机）'], ['n_samples', '张数']] as [string, string][]).map(([key, title]) => <label key={key}>{title}<input type="number" disabled={busy} step={key === 'scale' || key === 'cfg_rescale' ? '0.1' : '1'} value={state.parameters[key] ?? ''} onChange={e => setParameter(key, e.target.value === '' ? NaN : Number(e.target.value))} /></label>)}</div>
+                    <label>采样器<input disabled={busy} list="nai-samplers" value={state.parameters.sampler || ''} onChange={e => setParameter('sampler', e.target.value)} /></label><datalist id="nai-samplers">{['k_euler_ancestral', 'k_euler', 'k_dpmpp_2s_ancestral', 'k_dpmpp_2m', 'k_dpmpp_sde', 'ddim_v3'].map(s => <option key={s}>{s}</option>)}</datalist>
+                    <label>噪声计划<input disabled={busy} list="nai-noise" value={state.parameters.noise_schedule || ''} onChange={e => setParameter('noise_schedule', e.target.value)} /></label><datalist id="nai-noise">{['karras', 'exponential', 'polyexponential', 'native'].map(s => <option key={s}>{s}</option>)}</datalist>
+                    <details><summary>其他参数 JSON</summary><textarea aria-label="NAI 其他参数 JSON" rows={12} disabled={busy} value={paramsText} onChange={e => setParamsText(e.target.value)} /><button disabled={busy} onClick={() => { try { const value = JSON.parse(paramsText); if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('需要 JSON 对象'); setState({ ...state, parameters: value }); setNotice('JSON 参数已应用。组合模式会重新组装正负面/角色提示词，质量和 UC 使用显式词串。'); } catch (e) { setError(errorText(e)); } }}>应用 JSON 参数</button><button disabled={busy} onClick={() => setParamsText(JSON.stringify(state.parameters, null, 2))}>从当前表单刷新</button></details>
+                </>}
+                <details><summary>实际请求预览（不含 Key）</summary><pre className="nai-preview">{preview.request ? JSON.stringify(preview.request, null, 2) : preview.error}</pre></details>
+                <p className="nai-note">生成会使用你的 NAI 账号，可能消耗 Anlas；不会自动重试。图片以 NAI 返回的原始文件保存，不进行重绘或压缩。</p>
+                <div className="nai-row"><button className="nai-primary" disabled={busy || !preview.request} onClick={() => void generate()}>{busy ? '正在处理…' : '生成图片'}</button>{busy && <button onClick={() => abortRef.current?.abort()}>取消等待</button>}<button disabled={busy || !preview.request} onClick={() => void action(async () => { await shareOrDownloadBlob({ blob: new Blob([JSON.stringify(preview.request, null, 2)], { type: 'application/json' }), fileName: 'NAI-request.json', preferDownloadOnWeb: true }); })}>导出当前请求</button></div>
+                </section>
+                {images.map(image => <section key={image.generationId} className="nai-card nai-result"><TokenImg value={image.token} className="nai-image" /><p className="nai-note">{image.request.model} · Seed {image.request.parameters.seed}</p><div className="nai-row"><button disabled={busy} onClick={() => void action(async () => { await shareOrDownloadBlob({ blob: image.blob, fileName: `NAI-${image.generationId}.${image.blob.type === 'image/webp' ? 'webp' : image.blob.type === 'image/jpeg' ? 'jpg' : 'png'}`, preferDownloadOnWeb: true }); })}>保存原图</button><button disabled={busy || !selectedChar} onClick={() => void action(async () => { await saveNaiImageToAlbum(image, selectedChar); setNotice('相册已保存。'); })}>保存相册</button>{onSendToChat && <button disabled={busy || sent.has(image.generationId)} onClick={() => void action(async () => { await onSendToChat(image); setSent(previous => new Set([...previous, image.generationId])); addToast('图片已发到聊天', 'success'); })}>{sent.has(image.generationId) ? '已发送' : '发到当前聊天'}</button>}<button disabled={busy} onClick={() => { setRaw(JSON.stringify(image.request, null, 2)); setRawMode(true); }}>载入本图参数</button></div></section>)}
+            </>}
+            <input ref={importRef} hidden type="file" accept=".json,application/json" onChange={e => { void importFile('library', e.target.files?.[0]); e.target.value = ''; }} />
+            <input ref={requestImportRef} hidden type="file" accept=".json,application/json" onChange={e => { void importFile('request', e.target.files?.[0]); e.target.value = ''; }} />
+            <input ref={pngImportRef} hidden type="file" accept="image/png,.png" onChange={e => { void importFile('png', e.target.files?.[0]); e.target.value = ''; }} />
+            </>}
+        </div></main>
+    </div>;
+}
+
+export function NaiSettingsLauncher() {
+    const [open, setOpen] = useState(false);
+    return <><button className="nai-launch" type="button" onClick={() => setOpen(true)}>NovelAI 生图设置与资料库<small>API Key、模型参数、分类画师组合、角色固定外观</small></button>{open && <NaiWorkspace initialTab="connection" onClose={() => setOpen(false)} />}</>;
+}
