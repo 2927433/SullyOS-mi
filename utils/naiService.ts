@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import { DB } from './db';
 import { putImageBlob } from './blobRef';
 import { NAI_ASSET_ID, defaultNaiState, normalizeNaiState, naiBaseUrl, validateNaiRequest, type NaiState, type NaiRequest } from './nai';
+import { attachNaiReferences } from './naiReferences';
 
 export async function loadNaiState(): Promise<NaiState> {
     const value = await DB.getAssetRaw(NAI_ASSET_ID);
@@ -17,10 +18,23 @@ export function naiHttpError(status: number): Error {
     const errors: Record<number, string> = { 400: 'NAI 不接受这份参数，请核对模型和参数配置', 401: 'NAI Key 无效或已过期', 402: 'NAI 余额或订阅不足', 403: 'NAI 拒绝访问，请检查 Key 权限和订阅', 409: 'NAI 正在处理其他任务，请等待完成', 429: 'NAI 限流，请稍后手动重试。未自动重发', 500: 'NAI 服务端出错，请稍后重试' };
     return new Error(errors[status] || `NAI 请求失败（HTTP ${status}）`);
 }
+export async function readNaiApiError(response: Response, apiKey = ''): Promise<Error> {
+    let message = '';
+    try {
+        const raw = await response.text();
+        try { const value = JSON.parse(raw); const error = value.message ?? value.error?.message ?? value.error ?? value.detail; if (typeof error === 'string') message = error; else if (Array.isArray(error)) message = error.filter(v => typeof v === 'string').join('; '); }
+        catch { if (!/^\s*</.test(raw)) message = raw.slice(0, 600); }
+    } catch { /* retain HTTP status even for unreadable bodies */ }
+    const secret = apiKey.trim().replace(/^Bearer\s+/i, '');
+    if (secret) message = message.split(secret).join('[已隐藏密钥]');
+    message = message.replace(/Bearer\s+\S+|pst-[A-Za-z0-9_-]+/gi, '[已隐藏密钥]').replace(/[\r\n]+/g, ' ').slice(0, 400);
+    const correlation = (response.headers.get('x-correlation-id') || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60);
+    return new Error(`${naiHttpError(response.status).message}（HTTP ${response.status}）${message ? '：' + message : ''}${correlation ? '；请求编号 ' + correlation : ''}${response.status >= 500 ? '。也可能是模型或参数组合不被接受，请先核对模型 ID，再根据详情排查；未自动重试' : ''}`);
+}
 export async function checkNaiConnection(connection: NaiState['connection']): Promise<unknown> {
     if (!connection.apiKey.trim()) throw new Error('请填写 NAI Persistent API Token');
     const response = await fetch(`${naiBaseUrl(connection.baseUrl)}/user/subscription`, { headers: { Authorization: `Bearer ${connection.apiKey.trim().replace(/^Bearer\s+/i, '')}` }, signal: AbortSignal.timeout(20000) });
-    if (!response.ok) throw naiHttpError(response.status);
+    if (!response.ok) throw await readNaiApiError(response, connection.apiKey);
     return response.json();
 }
 /** The official image schema has model:string, not an account-specific /models list. */
@@ -52,7 +66,7 @@ export async function decodeNaiImages(response: Response): Promise<Blob[]> {
 }
 export interface NaiGeneratedImage { token: string; generationId: string; request: NaiRequest; blob: Blob }
 let running = false;
-export async function generateNaiImages(state: NaiState, request: NaiRequest, signal?: AbortSignal): Promise<NaiGeneratedImage[]> {
+export async function generateNaiImages(state: NaiState, request: NaiRequest, signal?: AbortSignal, options?: { useSavedReferences?: boolean; charId?: string; omitPeople?: boolean }): Promise<NaiGeneratedImage[]> {
     if (running) throw new Error('已有一项 NAI 生图正在进行，请等待完成');
     validateNaiRequest(request);
     if (!state.connection.apiKey.trim()) throw new Error('先在设置 → NovelAI 生图填写并保存 Key');
@@ -63,18 +77,27 @@ export async function generateNaiImages(state: NaiState, request: NaiRequest, si
     const timeout = setTimeout(abort, 180000);
     try {
         if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
+        const prepared = options?.useSavedReferences ? await attachNaiReferences(state, request, options.charId || '', async (image, model, informationExtracted) => {
+            const encodedResponse = await fetch(`${naiBaseUrl(state.connection.baseUrl)}/ai/encode-vibe`, { method: 'POST', headers: { Authorization: `Bearer ${state.connection.apiKey.trim().replace(/^Bearer\s+/i, '')}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ image, model, information_extracted: informationExtracted }), signal: controller.signal });
+            if (!encodedResponse.ok) throw await readNaiApiError(encodedResponse, state.connection.apiKey);
+            const bytes = new Uint8Array(await encodedResponse.arrayBuffer());
+            if (!bytes.length) throw new Error('NAI 没有返回 Vibe 编码');
+            let binary = ''; for (let i = 0; i < bytes.length; i += 8192) binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+            return btoa(binary);
+        }, controller.signal, options.omitPeople) : request;
+        validateNaiRequest(prepared);
         // One request, no automatic retries: generation can consume Anlas.
         const response = await fetch(`${naiBaseUrl(state.connection.baseUrl)}/ai/generate-image`, {
             method: 'POST', headers: { Authorization: `Bearer ${state.connection.apiKey.trim().replace(/^Bearer\s+/i, '')}`, 'Content-Type': 'application/json', Accept: 'application/zip' },
-            body: JSON.stringify(request), signal: controller.signal,
+            body: JSON.stringify(prepared), signal: controller.signal,
         });
-        if (!response.ok) throw naiHttpError(response.status);
+        if (!response.ok) throw await readNaiApiError(response, state.connection.apiKey);
         const blobs = await decodeNaiImages(response);
         const result: NaiGeneratedImage[] = [];
         for (const blob of blobs) {
             if (controller.signal.aborted) throw new DOMException('Cancelled', 'AbortError');
             const token = await putImageBlob(blob);
-            result.push({ token, generationId: crypto.randomUUID(), request: structuredClone(request), blob });
+            result.push({ token, generationId: crypto.randomUUID(), request: structuredClone(prepared), blob });
         }
         return result;
     } catch (error) {

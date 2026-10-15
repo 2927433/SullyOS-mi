@@ -1,3 +1,4 @@
+import { currentNaiTurn, draftNaiPrompt, resolveNaiPromptApi } from '../utils/naiPrompt';
 import { resolveDialogueApi } from '../utils/characterApi';
 import { createReplyRun, withReplyCancellation } from '../utils/chatReplyCancellation';
 
@@ -2117,8 +2118,9 @@ export const useChatAI = ({
                 if (naiSceneInstruction(latestNai, char.id)) {
                     try {
                         addToast('角色正在使用 NAI 生图，请保持页面打开', 'info');
-                        const request = buildNaiRequest({ ...latestNai, parameters: { ...latestNai.parameters, n_samples: 1 } }, char.id, naiReply.scene);
-                        const generated = await replyStep(async () => generateNaiImages(latestNai, request, replyRun.signal));
+                        const compiled = await replyStep(() => draftNaiPrompt(currentNaiTurn(contextMsgs, naiReply.text), resolveNaiPromptApi(latestNai, apiConfig), char, userProfile, latestNai.sceneGuide, replyRun.signal));
+                        const request = buildNaiRequest({ ...latestNai, parameters: { ...latestNai.parameters, n_samples: 1 } }, char.id, compiled.scene, '', undefined, compiled.details);
+                        const generated = await replyStep(async () => generateNaiImages(latestNai, request, replyRun.signal, { useSavedReferences: true, charId: char.id, omitPeople: !!compiled.details?.photoType && compiled.details.photoType !== 'selfie' }));
                         for (const image of generated) {
                             const id = await replyStep(async () => replyRun.saveMessage({ charId: char.id, role: 'assistant', type: 'image', content: image.token,
                                 metadata: { nai: { generationId: image.generationId, model: request.model, seed: request.parameters.seed } } }));

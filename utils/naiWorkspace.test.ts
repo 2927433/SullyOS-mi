@@ -31,6 +31,16 @@ function write(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectEleme
     });
 }
 describe('NAI 设置面板', () => {
+    it('模型、采样器、噪声使用下拉，Steps 和 CFG 使用滑块', async () => {
+        await act(async () => root.render(React.createElement(NaiWorkspace, { onClose: vi.fn() })));
+        expect(field('模型').tagName).toBe('SELECT');
+        expect(field('采样器').tagName).toBe('SELECT'); expect(field('噪声调度').tagName).toBe('SELECT');
+        expect(host.querySelector('[aria-label="步数 Steps 滑块"]')).not.toBeNull();
+        expect(host.querySelector('[aria-label="CFG 强度 滑块"]')).not.toBeNull();
+        write(field('采样器'), 'k_dpmpp_2m_sde');
+        await act(async () => button('保存设置').click());
+        expect(vi.mocked(saveNaiState).mock.calls[0][0].parameters.sampler).toBe('k_dpmpp_2m_sde');
+    });
     it('保存独立角色档案，角色切换不串提示词，自动生图默认关闭', async () => {
         await act(async () => root.render(React.createElement(NaiWorkspace, { initialTab: 'character', onClose: vi.fn() })));
         expect((field('允许角色') as HTMLInputElement).checked).toBe(false);
