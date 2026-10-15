@@ -10,6 +10,7 @@ import {
   VinylDisc, GlassProgress, PlayControls, BokehBg,
   MetaChip, SubActions,
 } from './music/MusicUI';
+import MusicShareDialog from './music/MusicShareDialog';
 import NeteaseProfilePage from './music/NeteaseProfilePage';
 import CharVisitPage from './music/CharVisitPage';
 import { shareOrDownloadBlob } from '../utils/shareExport';
@@ -94,6 +95,7 @@ const MusicApp: React.FC = () => {
   // 把 OS toast 注入到 Music Context（这样全局播放报错也能弹 toast）
   useEffect(() => { setToastHandler(addToast); }, [addToast, setToastHandler]);
 
+  const [shareSong,setShareSong]=useState<Song|null>(null);
   const [view, setView] = useState<View>('profile');
   // ── 手动对轴 modal state ──
   const [showLyricSync, setShowLyricSync] = useState(false);
@@ -273,7 +275,7 @@ const MusicApp: React.FC = () => {
         <BokehBg />
         <MizuHeader title="Now Playing" onBack={() => setView('search')} />
 
-        <div className="flex-1 flex flex-col items-center px-5 pt-4 pb-3 relative z-10 overflow-hidden">
+        <div className="music-player-body flex-1 min-h-0 flex flex-col items-center px-5 pt-4 pb-3 relative z-10 overflow-y-auto">
           <div className="shrink-0 mt-1 relative">
             <VinylDisc albumPic={current.albumPic} playing={playing} size={150} bitrate={bitrateMap[cfg.quality]} />
             {/* 重录中覆盖层 — 只在本地歌且 regeneratingId 匹配时显示 */}
@@ -436,6 +438,7 @@ const MusicApp: React.FC = () => {
 
           <div className="shrink-0 mt-3 w-full">
             <SubActions
+              onShare={() => setShareSong({...current})}
               liked={liked}
               onLike={() => { toggleLike(); trackEvent('收藏或取消收藏当前歌', { action: liked ? 'unlike' : 'like' }); }}
               showSync={!!(current.local && current.localLyrics && lyric.length > 0)}
@@ -556,6 +559,7 @@ const MusicApp: React.FC = () => {
 
   return (
     <div className="absolute inset-0 overflow-hidden">
+      {shareSong && <MusicShareDialog song={shareSong} onClose={()=>setShareSong(null)} />}
       {view === 'search' && renderSearch()}
       {view === 'player' && renderPlayer()}
       {view === 'settings' && renderSettings()}

@@ -205,6 +205,7 @@ export function normalizeMessageContent(
     // "[音乐卡片]" 这种没信息量的占位，丢掉"谁因为什么歌做了什么"的语义
     if (type === 'music_card') {
         const song = msg.metadata?.song as { name?: string; artists?: string } | undefined;
+        if (msg.role==='user' && msg.metadata?.intent==='share' && song?.name) return `[分享音乐] ${userName}分享了《${song.name}》— ${song.artists || '未知歌手'}${msg.metadata?.song?.album ? '；专辑：'+msg.metadata.song.album : ''}${msg.metadata?.note ? '；想聊：'+msg.metadata.note : ''}。仅分享歌曲信息，不能假装实际听过音频。`;
         const intent = msg.metadata?.intent as 'join' | 'add' | 'join_and_add' | undefined;
         const addedTo = msg.metadata?.addedToPlaylistTitle as string | undefined;
         if (song?.name) {

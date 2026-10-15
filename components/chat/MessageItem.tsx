@@ -1747,7 +1747,7 @@ const MessageItem = React.memo(({
     // --- Music Card Rendering (一起听 / 加入歌单) ---
     if (m.type === 'music_card' && m.metadata?.song) {
         const song = m.metadata.song as { songId: number; name: string; artists: string; albumPic: string };
-        const intent = (m.metadata.intent || 'join') as 'join' | 'add' | 'join_and_add';
+        const intent = (m.metadata.intent || 'join') as 'join' | 'add' | 'join_and_add' | 'share';
         const isTogether = intent === 'join' || intent === 'join_and_add';
         const addedTo = m.metadata.addedToPlaylistTitle as string | undefined;
 
@@ -1862,7 +1862,7 @@ const MessageItem = React.memo(({
                     {!isTogether && (
                         <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded-full backdrop-blur-sm text-[9px] font-medium"
                             style={{ background: 'rgba(255,255,255,0.85)', color: '#5a49a8' }}>
-                            📌 收入歌单
+                            {intent==='share'?'♫ 音乐分享':'📌 收入歌单'}
                         </div>
                     )}
                 </div>
@@ -1874,6 +1874,8 @@ const MessageItem = React.memo(({
                     <div className="text-[10px] mt-0.5 truncate" style={{ color: '#6b5b8f' }}>
                         {song.artists || '—'}
                     </div>
+                    {intent==='share' && m.metadata.note && <p className="text-xs mt-2 whitespace-pre-wrap break-words">{m.metadata.note}</p>}
+                    {intent==='share' && /^https:\/\/music\.163\.com\/#\/song\?id=\d+$/.test(m.metadata.publicUrl || '') && <a href={m.metadata.publicUrl} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} className="inline-block text-xs mt-2 underline">打开网易云</a>}
                     {addedTo && (
                         <div className="text-[9px] mt-1.5 italic" style={{ color: '#5a49a8' }}>
                             已加入《{addedTo}》

@@ -495,8 +495,9 @@ export const SubActions: React.FC<{
   showDownload?: boolean;
   playMode?: SubPlayMode;
   onCyclePlayMode?: () => void;    // 循环模式切换
+  onShare?: () => void;
   onAdd?: () => void;
-}> = ({ onLike, liked, onSync, showSync, onDownload, showDownload, playMode = 'loop', onCyclePlayMode, onAdd }) => {
+}> = ({ onLike, liked, onSync, showSync, onDownload, showDownload, playMode = 'loop', onCyclePlayMode, onAdd, onShare }) => {
   const Item = ({ icon, label, onClick, active }: { icon: React.ReactNode; label: string; onClick?: () => void; active?: boolean }) => (
     <button onClick={onClick}
       className="flex flex-col items-center gap-1 transition-opacity active:scale-95"
@@ -558,11 +559,12 @@ export const SubActions: React.FC<{
   const playModeLabel: Record<SubPlayMode, string> = { loop: 'Loop', single: 'One', shuffle: 'Mix' };
 
   return (
-    <div className="flex items-end justify-around gap-4 max-w-[280px] mx-auto">
+    <div className="flex items-end justify-around gap-2 flex-wrap max-w-[360px] mx-auto">
       <Item onClick={onLike} active={liked} label="Like" icon={heartSvg} />
       {showSync && onSync && <Item onClick={onSync} active label="Sync" icon={syncSvg} />}
       {showDownload && onDownload && <Item onClick={onDownload} active label="Save" icon={downloadSvg} />}
       {onCyclePlayMode && <Item onClick={onCyclePlayMode} active={playMode !== 'loop'} label={playModeLabel[playMode]} icon={loopSvg} />}
+      {onShare && <Item onClick={onShare} active label="分享给角色" icon={<span style={{fontSize:21,color:C.primary}}>↗</span>} />}
       {onAdd && <Item onClick={onAdd} label="Add" icon={addSvg} />}
     </div>
   );
