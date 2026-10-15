@@ -306,7 +306,7 @@ const LifeRecordPanel: React.FC = () => {
         setLoaded(true);
         if (mutated) markAmsgStateDirtyForAll({ characters, userProfile, groups, realtimeConfig });
     };
-    useEffect(() => { reload(false); }, []);
+    useEffect(() => { reload(false); const refresh=()=>void reload(false);window.addEventListener('sleep-shortcut-imported',refresh);return()=>window.removeEventListener('sleep-shortcut-imported',refresh); }, []);
 
     const saveSettings = async (patch: Partial<LifeRecordSettings>) => {
         await DB.saveLifeRecordSettings({ id: 'main', ...(settings || {}), ...patch });

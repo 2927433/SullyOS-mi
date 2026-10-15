@@ -1,3 +1,4 @@
+import ChatRecordSearch from '../components/chat/ChatRecordSearch';
 import {avatarFrameLayer} from '../utils/avatarFrameTarget';
 import ChatRuntimeStyle from '../components/chat/ChatRuntimeStyle';
 import {homePhoneAppearance,HOME_PHONE_BUBBLES} from './room3d/homePhoneAppearance';
@@ -302,6 +303,8 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
 
     // --- Multi-Select State ---
     const [selectionMode, setSelectionMode] = useState(false);
+    const [showRecordSearch,setShowRecordSearch]=useState(false);
+    useEffect(()=>setShowRecordSearch(false),[activeCharacterId]);
     const [showHistoryCleanup, setShowHistoryCleanup] = useState(false);
     useEffect(() => setShowHistoryCleanup(false), [activeCharacterId]);
     const [selectedMsgIds, setSelectedMsgIds] = useState<Set<number>>(new Set());
@@ -3992,6 +3995,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
                 document.body,
              )}
 
+             {showRecordSearch && <ChatRecordSearch key={char.id} character={char} userName={userProfile.name || '我'} onClose={()=>setShowRecordSearch(false)} onJump={id=>{setShowRecordSearch(false);void handleJumpToMessageInChat(id);}} />}
              {homePhone?<header className="home-phone-chat-header"><span className="home-phone-chat-avatar" aria-hidden="true">{char.name.slice(0,1)}</span><div><strong>{chatCharacterDisplayName(char)}</strong><small>{isTyping||instantChatPending?'正在输入…':'在家，也想给你发消息'}</small></div><button onClick={handleManualTrigger} disabled={isTyping} aria-label="让对方回复">↗</button></header>:<ChatHeader
                 selectionMode={selectionMode}
                 selectedCount={selectedMsgIds.size + Array.from(selectedThinkingMsgIds).filter(id => !selectedMsgIds.has(id)).length}
@@ -4008,6 +4012,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
                 onTriggerAI={handleManualTrigger}
                 triggerIcon={isTyping || instantChatPending ? 'stop' : 'lightning'}
                 hideTrigger={inputPreferences.sendButtonGenerates}
+                extraAction={{label:'查找聊天记录',icon:<span aria-hidden>⌕</span>,onClick:()=>setShowRecordSearch(true)}}
                 onShowCharsPanel={() => setShowPanel('chars')}
                 onDeleteBuff={(buffId) => {
                     const currentBuffs = char.activeBuffs || [];

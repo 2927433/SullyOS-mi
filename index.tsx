@@ -1,3 +1,4 @@
+import { captureHealthShortcut } from './utils/healthShortcut';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -48,6 +49,8 @@ if (import.meta.hot) import.meta.hot.dispose(disposeIOSStatusBarEdge);
 
 // 使用统计。构建时没配 VITE_UMAMI_* 就整个不生效，自部署实例默认如此。
 // 用户关掉开关、或浏览器开了 DNT，同样在这里就返回，连脚本都不会挂上去。
+captureHealthShortcut();
+window.addEventListener('hashchange',captureHealthShortcut);
 initAnalytics();
 
 // 浏览器自动翻译 (Chrome/Edge 等) 会改动 React 托管的 DOM，导致 reconcile 时

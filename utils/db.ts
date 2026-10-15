@@ -1018,6 +1018,25 @@ export const DB = {
     });
   },
 
+  /** Read-only paged scan of one character; includes processed history, never materializes all rows. */
+  searchPrivateMessagePage: async (charId:string,accept:(message:Message)=>boolean,beforeId?:number,limit=40,signal?:AbortSignal):Promise<{messages:Message[];hasMore:boolean}>=>{
+    const db=await openDB();
+    return new Promise((resolve,reject)=>{
+      if(signal?.aborted){reject(new DOMException('Cancelled','AbortError'));return;}
+      const tx=db.transaction(STORE_MESSAGES,'readonly'),rows:Message[]=[];let hasMore=false;
+      const abort=()=>tx.abort();signal?.addEventListener('abort',abort,{once:true});
+      const req=tx.objectStore(STORE_MESSAGES).index('charId').openCursor(IDBKeyRange.only(charId),'prev');
+      req.onsuccess=()=>{const cursor=req.result;if(!cursor)return;const row=cursor.value as Message;
+        if(beforeId!==undefined && row.id>=beforeId){cursor.continue();return;}
+        try{if(!row.groupId && accept(row)){if(rows.length>=Math.min(100,Math.max(1,limit))){hasMore=true;return;}rows.push(row);}}catch{tx.abort();return;}
+        cursor.continue();
+      };
+      tx.oncomplete=()=>{signal?.removeEventListener('abort',abort);resolve({messages:rows,hasMore});};
+      tx.onabort=()=>{signal?.removeEventListener('abort',abort);reject(signal?.aborted?new DOMException('Cancelled','AbortError'):tx.error||new Error('聊天查询失败'));};
+      tx.onerror=()=>{signal?.removeEventListener('abort',abort);reject(tx.error||new Error('聊天查询失败'));};
+    });
+  },
+
   getMessageById: async (id: number): Promise<Message | null> => {
     const db = await openDB();
     return new Promise((resolve, reject) => {

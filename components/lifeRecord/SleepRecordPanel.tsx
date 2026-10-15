@@ -20,7 +20,7 @@ export default function SleepRecordPanel({records,onReload,onRemove}:{records:Li
  };
  const inputClass='w-full min-w-0 rounded-xl border border-violet-200 bg-white p-2 text-sm';
  return <section className="space-y-4 text-sm" style={{color:'#514576'}}>
- <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 space-y-3"><h3 className="font-bold">睡眠记录</h3><p className="text-xs leading-relaxed">保存已完成的睡眠，按醒来日期归档。Apple 健康数据需先导出文件；当前网页不会直接读取手表。</p>
+ <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 space-y-3"><h3 className="font-bold">睡眠记录</h3><button className="rounded-xl border border-violet-300 p-2" disabled={busy} onClick={()=>window.dispatchEvent(new Event('sully-health-shortcut-open'))}>健康快捷指令记录</button><p className="text-xs leading-relaxed">保存已完成的睡眠，按醒来日期归档。Apple 健康数据需先导出文件；当前网页不会直接读取手表。</p>
  <label className="block">归档方式<select className={inputClass} disabled={busy} value={charId} onChange={e=>setCharId(e.target.value)}><option value="">我自己记录</option>{eligible.map(c=><option key={c.id} value={c.id}>让 {c.name} 代记（生成确认卡片）</option>)}</select></label>
  <p className="text-xs">让角色了解睡眠：在角色设置 → 生活记录，开启总开关及“睡眠记录”。它读取已导入摘要，不代表实时监测；关闭睡眠开关即可停止后续注入。</p>
  <label className="block">入睡时间<input className={inputClass} type="datetime-local" disabled={busy} value={start} onChange={e=>setStart(e.target.value)} /></label><label className="block">醒来时间<input className={inputClass} type="datetime-local" disabled={busy} value={end} onChange={e=>setEnd(e.target.value)} /></label><label className="block">睡眠备注<input className={inputClass} disabled={busy} value={note} maxLength={1000} onChange={e=>setNote(e.target.value)} /></label>
