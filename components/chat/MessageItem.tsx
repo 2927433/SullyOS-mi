@@ -1,3 +1,4 @@
+import ShijiOrderCard from './ShijiOrderCard';
 import { avatarDecorationImageStyle, isAnniversaryFrame } from '../../utils/anniversaryGifts';
 
 
@@ -3016,6 +3017,8 @@ const MessageItem = React.memo(({
     if (m.type === 'transfer') {
         return <TransferCard m={m} isUser={isUser} charName={charName} commonLayout={commonLayout} selectionMode={selectionMode} onResolveTransfer={onResolveTransfer} initiallyOpen={previewTransferOpen} />;
     }
+
+    if (m.type === 'text' && m.metadata?.shijiOrder) return commonLayout(<ShijiOrderCard order={m.metadata.shijiOrder} />);
 
     if (m.type === 'life_card') {
         return <LifeRecordCard m={m} charName={charName} commonLayout={commonLayout} selectionMode={selectionMode} onResolveLifeRecord={onResolveLifeRecord} />;

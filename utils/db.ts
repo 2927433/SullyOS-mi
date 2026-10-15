@@ -1,3 +1,5 @@
+import type { ShijiOrder } from './shijiTypes';
+import { SHIJI_ORDERS } from './shijiTypes';
 import { readLocalCursor } from './localRead';
 import { reportDatabaseFailure } from './databaseHealth';
 import { associateDatabaseOpen, beginDatabaseOpen, recordDatabaseOpen } from './databaseOpenDiagnostics';
@@ -1478,6 +1480,37 @@ export const DB = {
           const request = store.get(id);
           request.onsuccess = () => resolve(request.result?.data ?? null);
           request.onerror = () => reject(request.error);
+      });
+  },
+
+  /** One local transaction: order and its chat share either both commit or neither does. */
+  commitShijiOrder: async (input: ShijiOrder, share: boolean): Promise<ShijiOrder> => {
+      const db=await openDB();
+      return new Promise((resolve,reject)=>{
+          const tx=db.transaction([STORE_ASSETS,STORE_MESSAGES],'readwrite');
+          const assets=tx.objectStore(STORE_ASSETS),messages=tx.objectStore(STORE_MESSAGES);
+          let result:ShijiOrder;
+          const request=assets.get(SHIJI_ORDERS);
+          request.onsuccess=()=>{
+              const raw=request.result?.data;
+              if(raw!==undefined && !Array.isArray(raw)){tx.abort();return;}
+              const orders:ShijiOrder[]=raw || [];
+              const previous=orders.find(o=>o.id===input.id);
+              result=previous || structuredClone(input);
+              const persist=()=>assets.put({id:SHIJI_ORDERS,data:[result,...orders.filter(o=>o.id!==result.id)]});
+              if(share && result.sharedMessageId===undefined){
+                  if(!result.recipientId){tx.abort();return;}
+                  const body=result.lines.map(line=>line.item.name+' ×'+line.quantity).join('、');
+                  const req=messages.add({charId:result.recipientId,role:'user',type:'text',timestamp:Date.now(),content:'[拾集'+(result.mode==='food'?'外卖':'购物')+'订单]\n收件人：'+result.recipientName+'\n'+body+'\n合计：¥'+(result.totalCents/100).toFixed(2)+(result.note?'\n留言：'+result.note:'')+'\n（小手机内订单，非真实配送）',metadata:{shijiOrder:result}});
+                  req.onsuccess=()=>{result={...result,sharedMessageId:Number(req.result)};clearStaleMemoryMirror(tx,result.recipientId,Number(req.result));persist();};
+              }else persist();
+          };
+          tx.oncomplete=()=>{
+              if(result.sharedMessageId!==undefined){try{const key='mp_lastMsgId_'+result.recipientId;if(Number(localStorage.getItem(key)||0)>=result.sharedMessageId)localStorage.removeItem(key);}catch{/* Storage may be unavailable. */}}
+              resolve(result);
+          };
+          tx.onerror=()=>reject(tx.error || new Error('订单保存失败'));
+          tx.onabort=()=>reject(tx.error || new Error('订单事务已取消，未分享'));
       });
   },
 
@@ -4381,3 +4414,4 @@ export const DB = {
       await ensureStoryTimelineRepair(db);
   }
 };
+

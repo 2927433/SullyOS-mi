@@ -115,7 +115,7 @@ const ACNH_ICON_MAP: Partial<Record<AppID, React.ReactNode>> = {
   [AppID.Gallery]: draw([17, 25, 83, 79], camGlyph('#82D5BB')),
   [AppID.XhsStock]: draw([17, 25, 83, 79], camGlyph('#FC736D')),
   [AppID.Music]: draw([35, 22, 80, 76], musicGlyph),
-  [AppID.Songwriting]: draw([35, 22, 80, 76], musicGlyph),
+  [AppID.Songwriting]: draw([22, 22, 78, 82], <><path d="M25 40h50l3 42H22z" fill="#F4C18C" stroke={BROWN} strokeWidth="4" strokeLinejoin="round"/><path d="M37 42V32a13 13 0 0 1 26 0v10" fill="none" stroke={BROWN} strokeWidth="4" strokeLinecap="round"/><path d="m42 58 7 7 12-13" fill="none" stroke={BROWN} strokeWidth="4" strokeLinecap="round"/></>),
   [AppID.Game]: draw([18, 40, 82, 70], <>
     <rect x="18" y="40" width="64" height="30" rx="15" fill={CREAM} />
     <rect x="30" y="52" width="14" height="5" rx="2.5" fill={BROWN} /><rect x="34.5" y="47.5" width="5" height="14" rx="2.5" fill={BROWN} />

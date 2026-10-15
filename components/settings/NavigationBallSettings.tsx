@@ -7,13 +7,13 @@ import { AppID } from '../../types';
 const NavigationSlotPicker = React.lazy(() => import('./NavigationSlotPicker'));
 // Only mounted when a slot is being edited. Project titles, never message/book bodies.
 function SlotPickerWithResources(props: React.ComponentProps<typeof NavigationSlotPicker>) {
-  const { groups = [], novels = [], songs = [], worldbooks = [] } = useOS();
+  const { groups = [], novels = [], worldbooks = [] } = useOS();
   const resources = React.useMemo(() => ({
     [AppID.GroupChat]: groups.map(item => ({ id: item.id, name: item.name })),
     [AppID.Novel]: novels.map(item => ({ id: item.id, name: item.title })),
-    [AppID.Songwriting]: songs.map(item => ({ id: item.id, name: item.title })),
+
     [AppID.Worldbook]: worldbooks.map(item => ({ id: item.id, name: item.title })),
-  }), [groups, novels, songs, worldbooks]);
+  }), [groups, novels, worldbooks]);
   return <NavigationSlotPicker {...props} resources={props.resources || resources} />;
 }
 export default function NavigationBallSettings({ characters = [], loadWorlds, resources }: { characters?: readonly ShortcutCharacter[]; loadWorlds?: () => Promise<ShortcutWorld[]>; resources?: ShortcutResources }) {

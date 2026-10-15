@@ -18,7 +18,7 @@ export const APP_SHORTCUT_ENTRIES: Partial<Record<AppID, Entry[]>> = {
   [AppID.MemoryPalace]: pages(['palace', '记忆房间', 'characters'], ['pixelHome', '像素家园', 'characters'], ['all', '全部记忆', 'characters'], ['boxes', '记忆盒', 'characters'], ['settings', '角色记忆设置', 'characters'], ['globalSettings', '全局记忆设置']),
   [AppID.Music]: pages(['profile', '我的音乐'], ['search', '搜索音乐'], ['player', '正在播放'], ['visit_char', '角色音乐角落', 'characters'], ['settings', '音乐设置']),
   [AppID.Novel]: pages(['shelf', '书稿', 'resources'], ['library', '角色创作档案', 'characters'], ['create', '新建书稿']),
-  [AppID.Songwriting]: pages(['shelf', '乐谱', 'resources'], ['create', '新建乐谱', 'characters']),
+  [AppID.Songwriting]: pages(['goods', '逛逛'], ['food', '给角色点外卖', 'characters'], ['orders', '订单']),
   [AppID.Appearance]: pages(['theme', '系统主题'], ['icons', '应用图标'], ['presets', '外观预设'], ['sharing', '外观装扮']),
   [AppID.Bank]: pages(['game', '存钱小屋'], ['manage', '收支管理'], ['report', '统计报告']),
   [AppID.Social]: pages(['home', '动态首页'], ['me', '我的主页']),
