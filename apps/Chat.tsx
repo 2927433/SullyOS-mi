@@ -1523,7 +1523,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
         // 小红书链接 → xhs_card。主路径不依赖任何后端：小红书分享文案自带标题（【标题】）
         // 和笔记 id/token，直接解析就能建卡，让「没部署小红书 MCP」的用户也能让角色看到分享了哪篇笔记。
         // 配了 MCP 的话再抓详情补正文/封面/作者（锦上添花，抓失败也不影响基础卡）。
-        if (type === 'text') {
+        if (type === 'text' && metadata?.fakeVoice !== true) {
             let xhsCardCreated = false;
             let webpageCardCreated = false;
             const xhsFullNote = extractXhsNoteLink(text);
@@ -1667,6 +1667,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
         try {
             const sent = await sendText(customContent, customType, metadata);
             finish(sent === true && (!customType || ['text', 'image', 'emoji'].includes(customType)));
+            return sent === true;
         } catch (error) {
             finish(false);
             throw error;
@@ -4417,6 +4418,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
                     isTyping={isTyping || instantChatPending} selectionMode={selectionMode}
                     showPanel={showPanel} setShowPanel={setShowPanel}
                     onSend={handleSendCallback}
+                    onSendFakeVoice={async text => await handleSendText(text, 'text', { fakeVoice: true })}
                     onGenerate={handleManualTrigger}
                     sendButtonGenerates={inputPreferences.sendButtonGenerates}
                     enterToSend={inputPreferences.enterToSend}

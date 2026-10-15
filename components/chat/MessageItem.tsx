@@ -5,6 +5,7 @@ import { avatarDecorationImageStyle, isAnniversaryFrame } from '../../utils/anni
 import React, { useEffect, useRef, useState } from 'react';
 const AivenFishSaleReceipt = React.lazy(() => import('../../apps/vrWorld/AivenFishSaleReceipt').then(module => ({ default: module.AivenFishSaleReceipt })));
 import { Message, ChatTheme } from '../../types';
+import UserFakeVoiceBar from './UserFakeVoiceBar';
 import { phoneFieldToText } from '../../utils/phoneEvidence';
 import { tryParseLifeSimResetCard } from '../../utils/lifeSimChatCard';
 import { VALID_INTERJECTION_TAGS, cleanVoiceMarkupForDisplay } from '../../utils/minimaxTts';
@@ -3320,7 +3321,7 @@ const MessageItem = React.memo(({
     const generatedVoiceSubtitle = showSarTruth && hasSarSurface
         ? voiceSubtitleText
         : cleanVoiceText(voiceData?.originalText);
-    const hasVoiceContent = voiceData?.url || voiceLoading || hasVoiceTag;
+    const hasVoiceContent = voiceData?.url || voiceLoading || hasVoiceTag || (isUser && m.metadata?.fakeVoice === true);
     // Don't render empty bubbles (e.g. messages that were just "---"), unless voice data exists or pending
     if (!displayContent && !hasVoiceContent) return null;
 
@@ -3375,7 +3376,8 @@ const MessageItem = React.memo(({
 
             {/* Layer 4: Text Content — shown when there's visible text after stripping voice tags */}
             {/* 外语语音消息把双语文字交给下方语音条渲染，顶部不再重复正文 */}
-            {displayContent && !isForeignVoiceMsg && (
+            {isUser && m.type === 'text' && m.metadata?.fakeVoice === true && <UserFakeVoiceBar key={m.id} text={m.content} />}
+            {displayContent && !isForeignVoiceMsg && !(isUser && m.metadata?.fakeVoice === true) && (
             <div className="relative z-10 text-[15px] leading-relaxed whitespace-pre-wrap break-normal [overflow-wrap:anywhere] select-text" style={{ color: styleConfig.textColor }}>
                 {renderContent(displayContent)}
                 {showExpandedTranslation && (

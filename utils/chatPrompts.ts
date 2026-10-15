@@ -1135,6 +1135,7 @@ ${voiceActingGuide()}`;
                 let content: any = m.content;
                 const timeStr = timeAwarenessOn && hasReliableMessageTimestamp(m) ? `[${ChatPrompts.formatDate(m.timestamp, charTz)}]` : '';
                 const sourceTag = (() => {
+                    if (m.role === 'user' && m.type === 'text' && m.metadata?.fakeVoice === true) return '[聊天·语音转写]';
                     const source = m.metadata?.source;
                     if (source === 'call') return '[通话]';
                     if (source === 'date') return '[约会]';
