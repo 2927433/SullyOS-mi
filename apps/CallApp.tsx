@@ -1,3 +1,4 @@
+import CallImageControls from '../components/call/CallImageControls';
 import { resolveDialogueApi } from '../utils/characterApi';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 import { canAnalyzeVoiceSource, isVoiceAudioPriming, primeVoiceAudio, voicePlaybackErrorMessage } from '../utils/voicePlayback';
@@ -556,6 +557,10 @@ const CallApp: React.FC = () => {
   const [bubbles, setBubbles] = useState<CallBubble[]>([]);
   const [callRecords, setCallRecords] = useState<CallRecord[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string>(() => `call-${Date.now()}`);
+  const [generatedVideoFrame,setGeneratedVideoFrame]=useState<{scope:string;url:string}|null>(null);
+  const videoImageScope=selectedCharId+':'+currentSessionId;
+  const videoImageUrl=viewMode==='in-call'&&callMode==='video'&&callState!=='ended'&&generatedVideoFrame?.scope===videoImageScope?generatedVideoFrame.url:undefined;
+  useEffect(()=>{setGeneratedVideoFrame(null);},[selectedCharId,currentSessionId,viewMode,callMode]);
   const streamingVoice = useStreamingVoice(`${selectedCharId}:${currentSessionId}:${viewMode}`);
   const [incrementalVoice, setIncrementalVoice] = useState(() => {
     try { return localStorage.getItem('sully-call-incremental-voice') !== 'off'; } catch { return true; }
@@ -3713,6 +3718,7 @@ ${sentencePlan}`;
       </div>
       {/* portrait + aura —— 键盘弹起时（body.ios-keyboard-open）整块收起，把可视区让给消息+输入框，
           避免大头像把输入框顶出键盘上方的可视区（见 index.html 的 .sully-call-hero 规则）。 */}
+      {callMode==='video'&&selectedChar&&viewMode==='in-call'&&callState!=='idle'&&callState!=='ended'&&<CallImageControls key={videoImageScope} char={selectedChar} user={userProfile} api={apiConfig} bubbles={bubbles} hasFrame={!!videoImageUrl} onFrame={url=>setGeneratedVideoFrame({scope:videoImageScope,url})} onRestore={()=>setGeneratedVideoFrame(null)}/>}
       {callMode === 'video' ? (
         <div className={`sully-call-hero sully-stage-dark sully-video-stage-shell relative px-2 pb-2 pt-2 ${videoCallLayout === 'stage' ? 'flex-1 min-h-0' : 'shrink-0'} ${videoStageSize}`}>
           <span className="pointer-events-none absolute left-3 top-3 z-20 h-8 w-8 rounded-tl-[1.8rem] border-l border-t" style={{ borderColor: `${accentColor}aa` }} aria-hidden />
@@ -3720,7 +3726,7 @@ ${sentencePlan}`;
           <span className="pointer-events-none absolute bottom-3 left-3 z-20 text-[8px]" style={{ color: accentColor }} aria-hidden>✦</span>
           <span className="pointer-events-none absolute bottom-3 right-3 z-20 text-[7px] text-white/55" aria-hidden>✦</span>
           {/* The action editor owns its own WebGL preview; suspend this one. */}
-          <VRMVideoCallStage
+          {videoImageUrl?<img src={videoImageUrl} alt={selectedChar?.name+' 的生成镜头'} className="call-generated-frame"/>:<VRMVideoCallStage
             characterName={selectedChar?.name || '未选择'}
             fallbackAvatar={selectedChar?.avatar}
             model={!showLive2DSettings && selectedVisualSource === 'model' ? selectedChar?.videoAvatar : undefined}
@@ -3744,7 +3750,7 @@ ${sentencePlan}`;
             onExpressionsDiscovered={names => { vrmExpressionsRef.current = names; }}
             onAvatarTouch={handleAvatarTouch}
             maxFps={30}
-          />
+          />}
           <AvatarTouchFeedback
             characterName={selectedChar?.name || '对方'}
             accentColor={accentColor}
