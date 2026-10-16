@@ -2716,6 +2716,8 @@ export interface MemoryPalaceWaterlineConfig {
 }
 
 export interface CharacterProfile {
+  /** Opt-in fourth-wall creative effect, isolated per character. */
+  chatMeta?: {enabled:boolean;probability:number};
   /** Local default for this character's dialogue; absent means follow Settings. Never shared in cards. */
   dialogueApi?: DialogueApiConfig;
   id: string;

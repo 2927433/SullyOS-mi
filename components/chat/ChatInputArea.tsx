@@ -550,6 +550,10 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
             </div>)}
             <span className="text-xs font-bold">日程/情绪</span>
         </button>,
+        ...(characters ? [<button key="meta" onClick={() => onPanelAction('meta')} className={`flex flex-col items-center gap-2 active:scale-95 transition-transform ${isDiscordStyle ? 'text-slate-200' : 'text-slate-600'}`}>
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-indigo-50 text-indigo-500 border border-indigo-100"><span className="text-xl" aria-hidden="true">↗</span></div>
+            <span className="text-xs font-bold">meta</span>
+        </button>] : []),
         <button key="proactive" onClick={() => onPanelAction('proactive')} className={`flex flex-col items-center gap-2 active:scale-95 transition-transform relative ${acnh ? 'text-[#725d42]' : isDiscordStyle ? 'text-slate-200' : 'text-slate-600'}`}>
             {acnh ? <AcnhActionTile kind="proactive" /> : (
             <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm border ${isProactiveActive ? (isDiscordStyle ? 'bg-violet-500/15 text-violet-300 border-violet-400/30' : 'bg-violet-50 text-violet-500 border-violet-200') : (isDiscordStyle ? 'bg-slate-800 text-slate-400 border-white/10' : 'bg-slate-50 text-slate-400 border-slate-100')}`}>

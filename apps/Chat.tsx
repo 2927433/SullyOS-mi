@@ -1,3 +1,4 @@
+import ChatMetaSettings from '../components/chat/ChatMetaSettings';
 import {repairClearGlassBackground} from '../utils/clearGlassBackground';
 import ChatRecordSearch from '../components/chat/ChatRecordSearch';
 import {avatarFrameLayer} from '../utils/avatarFrameTarget';
@@ -293,6 +294,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
     const [editContent, setEditContent] = useState('');
     const [isSummarizing, setIsSummarizing] = useState(false);
     const [archiveProgress, setArchiveProgress] = useState('');
+    const [showMetaModal, setShowMetaModal] = useState(false);
     const [showProactiveModal, setShowProactiveModal] = useState(false);
     const [showActiveMsg2Modal, setShowActiveMsg2Modal] = useState(false);
     const [showThinkingChainModal, setShowThinkingChainModal] = useState(false);
@@ -1811,6 +1813,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
             case 'category-options': setSelectedCategory(payload); setModalType('category-options'); break;
             case 'delete-category-req': setSelectedCategory(payload); setModalType('delete-category'); break;
             case 'meetup': if (char) { setShowPanel('none'); openDateWithChar(char.id); } break;
+            case 'meta': setShowPanel('none'); setShowMetaModal(true); break;
             case 'proactive': setShowProactiveModal(true); break;
             case 'active-msg-2': setShowActiveMsg2Modal(true); break;
             case 'emotion': setModalType('schedule'); break; // 情绪已并入日程，打开同一 modal
@@ -3549,7 +3552,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
         active: (activeApp === AppID.Chat || !!homePhone) && !!char,
         blocked: isInputFocused || !!input.trim() || showPanel !== 'none' || modalType !== 'none'
             || selectionMode || isSummarizing || collaborationOpen || memoryRepairOpen || favoritesOpen
-            || naiOpen || showProactiveModal || showActiveMsg2Modal || showThinkingChainModal
+            || naiOpen || showMetaModal || showProactiveModal || showActiveMsg2Modal || showThinkingChainModal
             || mcdAppOpen || luckinAppOpen || showForwardModal,
         generating: isTyping || instantChatPending || isProactiveComposing,
         onGenerate: handleManualTrigger,
@@ -4479,6 +4482,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
             </div>
 
 
+            {char && showMetaModal && <ChatMetaSettings key={char.id} value={char.chatMeta} characterName={char.name} onClose={()=>setShowMetaModal(false)} onSave={value=>{updateCharacter(char.id,{chatMeta:value});setShowMetaModal(false);}}/>}
             {/* Proactive Settings Modal */}
             {char && (
                 <ProactiveSettingsModal

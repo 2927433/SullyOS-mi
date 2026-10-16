@@ -1,3 +1,4 @@
+import {prepareChatMeta} from '../utils/chatMeta';
 import { currentNaiTurn, draftNaiPrompt, resolveNaiPromptApi } from '../utils/naiPrompt';
 import { resolveDialogueApi } from '../utils/characterApi';
 import { createReplyRun, withReplyCancellation } from '../utils/chatReplyCancellation';
@@ -948,6 +949,13 @@ export const useChatAI = ({
                     unansweredUserTurn: hasUnansweredUserTurn(currentMsgs, contextMsgs),
                 });
             if (naiInstruction && !payload.flags.promptBuildSkipped) fullMessages.push({ role: 'system', content: naiInstruction });
+            // Draw once per actual user turn, before local/cloud dispatch; never in shared previews.
+            if (!payload.flags.promptBuildSkipped && !homePhoneContext) {
+                const lastUser = [...contextMsgs].reverse().find(m=>m.role==='user');
+                const metaPrompt = await replyStep(()=>prepareChatMeta(char.id,char.chatMeta,
+                    ([...contextMsgs].reverse().find(m=>m.role==='user'||m.role==='assistant')?.role==='user'||hasUnansweredUserTurn(currentMsgs,contextMsgs))?lastUser?.id:undefined));
+                if(metaPrompt)fullMessages.push({role:'system',content:metaPrompt});
+            }
             const promptBuildSkipped = payload.flags.promptBuildSkipped;
             if (payload.flags.mcdActive) {
                 console.log(`🍔 [MCD-MiniApp] 注入协同点餐上下文 step=${mcdMiniSnap?.step} cartItems=${mcdMiniSnap?.cart?.length || 0} menuItems=${mcdMiniSnap?.menuMeals ? Object.keys(mcdMiniSnap.menuMeals).length : 0} nutrition=${mcdMiniSnap?.nutritionData ? mcdMiniSnap.nutritionData.length : 0}字`);
