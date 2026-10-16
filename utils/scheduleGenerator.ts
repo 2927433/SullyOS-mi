@@ -1,3 +1,4 @@
+import {loadScheduleDiversityHistory,buildScheduleDiversityPrompt} from './scheduleDiversity';
 
 import { CharacterProfile, UserProfile, DailySchedule, ScheduleSlot, Message, Emoji } from '../types';
 import { ContextBuilder } from './context';
@@ -279,9 +280,12 @@ export async function generateDailyScheduleForChar(
 
     const style = char.scheduleStyle || 'lifestyle';
     const homePrompt = buildHomeSchedulePrompt(char);
+    // Only this character's last seven calendar days; re-rolls also compare today's old plan.
+    const recentSchedules = await loadScheduleDiversityHistory(char.id,today,forceRegenerate).catch(()=>[]);
+    const diversityPrompt = buildScheduleDiversityPrompt(char,today,recentSchedules);
     const prompt = (style === 'mindful'
         ? buildMindfulPrompt('', char, userProfile, today, dayOfWeek, chatHistoryBlock)
-        : buildLifestylePrompt('', char, userProfile, today, dayOfWeek, chatHistoryBlock)) + homePrompt;
+        : buildLifestylePrompt('', char, userProfile, today, dayOfWeek, chatHistoryBlock)) + homePrompt + diversityPrompt;
 
     try {
         const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
