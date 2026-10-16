@@ -1,7 +1,7 @@
 import {DB} from './db';
 import {HEALTH_METRICS,type HealthShortcutData} from './healthShortcut';
 import type {LifeRecord} from '../types';
-import {sleepSummary} from './sleepRecords';
+import {sleepSummary,SLEEP_ANALYSIS_GUIDE} from './sleepRecords';
 export const HEALTH_DATA_CHANGED='user-health-data-changed';
 // Detailed sleep records are authoritative. Snapshot totals are a labelled fallback only.
 export function healthSleepSummary(records:LifeRecord[],data:HealthShortcutData|null,limit=7):string{
@@ -15,5 +15,5 @@ export async function buildHealthSummary(includeSleep=true):Promise<string>{
  if(!data?.metrics)return '- 健康：尚无接收数据，不可推测实时状态。'+(includeSleep?'睡眠（与睡眠页同源）：'+healthSleepSummary(await DB.getAllLifeRecords(),null):'');
  const values=Object.entries(data.metrics).filter(([key,value])=>key!=='sleepMinutes' && HEALTH_METRICS[key] && typeof value==='number' && Number.isFinite(value));
  const sleep=includeSleep?'；睡眠（与睡眠页同源）：'+healthSleepSummary(await DB.getAllLifeRecords(),data):'';
- return '- 健康快照：数据日期 '+data.date+'；接收于 '+new Date(data.receivedAt).toLocaleString()+'。'+values.map(([key,value])=>HEALTH_METRICS[key].label+' '+value+' '+HEALTH_METRICS[key].unit).join('；')+sleep+'。这是用户已接收的记录，不代表今天或实时测量；不要声称直接监测手表或给出诊断，不需按运动目标催促用户。';
+ return '- 健康快照：数据日期 '+data.date+'；接收于 '+new Date(data.receivedAt).toLocaleString()+'。'+values.map(([key,value])=>HEALTH_METRICS[key].label+' '+value+' '+HEALTH_METRICS[key].unit).join('；')+sleep+(includeSleep?'；'+SLEEP_ANALYSIS_GUIDE:'')+'。这是用户已接收的记录，不代表今天或实时测量；不要声称直接监测手表或给出诊断，不需按运动目标催促用户。';
 }

@@ -3,7 +3,7 @@ import {parseHealthShortcut,type HealthShortcutData} from './healthShortcut';
 export function parseHealthTransfer(text:string):HealthShortcutData{
  const raw=text.trim();
  if(!raw)throw new Error('请粘贴健康 JSON，或选择快捷指令导出的 JSON 文件');
- if(raw.length>100000)throw new Error('导入内容过大，请仅传当天指标');
+ if(raw.length>750000)throw new Error('导入内容过大，请仅传当天指标');
  if(raw.startsWith('{'))return parseHealthShortcut(raw);
  if(/^https?:\/\//i.test(raw) || raw.startsWith('#health-import=')){
   const hash=raw.startsWith('#')?raw:new URL(raw).hash;

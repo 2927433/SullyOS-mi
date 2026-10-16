@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import type { LifeRecord } from '../../types';
 import { useOS } from '../../context/OSContext';
-import { readSleepFile, sleepPayload, sleepDate, sleepSummary, type SleepPayload } from '../../utils/sleepRecords';
+import { readSleepFile, sleepPayload, sleepDate, sleepSummary, sleepStageSummary, SLEEP_STAGE_LABELS, type SleepPayload } from '../../utils/sleepRecords';
 import { storeSleepRecords } from '../../utils/sleepImport';
 import { shareOrDownloadBlob } from '../../utils/shareExport';
 
@@ -16,11 +16,17 @@ export default function SleepRecordPanel({records,onReload,onRemove}:{records:Li
  const action=async(task:()=>Promise<void>)=>{setBusy(true);setError('');setNotice('');try{await task();}catch(e){setError(e instanceof Error?e.message:'睡眠记录操作失败');}finally{setBusy(false);}};
  const save=async(items:SleepPayload[])=>{
   const char=charId?characters.find(c=>c.id===charId):undefined;if(charId&&!char)throw new Error('请选择有效角色');
-  try{const result=await storeSleepRecords(items,char);setNotice(`已保存 ${result.added} 条，跳过 ${result.duplicates} 条重复记录。${char?'请到与该角色的聊天中确认或否决卡片。':''}`);}finally{await onReload();}
+  try{const result=await storeSleepRecords(items,char);setNotice(`已保存 ${result.added} 条，补全 ${result.updated} 条分期（原有总时长保留），跳过 ${result.duplicates} 条重复记录。${char?'请到与该角色的聊天中确认或否决卡片。':''}`);}finally{await onReload();}
  };
  const inputClass='w-full min-w-0 rounded-xl border border-violet-200 bg-white p-2 text-sm';
  return <section className="space-y-4 text-sm" style={{color:'#514576'}}>
- <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 space-y-3"><h3 className="font-bold">睡眠记录</h3><button className="rounded-xl border border-violet-300 p-2" disabled={busy} onClick={()=>window.dispatchEvent(new Event('sully-health-shortcut-open'))}>健康快捷指令记录</button><p className="text-xs leading-relaxed">保存已完成的睡眠，按醒来日期归档。Apple 健康数据需先导出文件；当前网页不会直接读取手表。</p>
+ {entries[0]&&<div className="rounded-2xl border border-violet-200 bg-white p-4 space-y-3">
+  <h3 className="font-bold">最新归档的睡眠 · {entries[0].date}</h3>
+  <p>{sleepSummary(entries[0].payload,false)}</p>
+  <dl className="grid grid-cols-2 gap-2">{Object.entries(SLEEP_STAGE_LABELS).map(([key,label])=><div key={key} className="rounded-xl bg-violet-50 p-3"><dt className="text-xs">{label}</dt><dd className="mt-1 font-bold">{typeof entries[0].payload[key]==='number'?entries[0].payload[key]+' 分钟':'未导入'}</dd></div>)}</dl>
+  <p className="text-xs leading-relaxed">手表分期是估算。结合总时长、清醒情况、多次记录和醒后体感讨论，不单靠某阶段比例判断睡得好坏。</p>
+ </div>}
+ <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 space-y-3"><h3 className="font-bold">睡眠记录</h3><button className="rounded-xl border border-violet-300 p-2" disabled={busy} onClick={()=>window.dispatchEvent(new Event('sully-health-shortcut-open'))}>健康快捷指令记录</button><p className="text-xs leading-relaxed">保存已完成的睡眠，按记录结束日期归档。支持快捷指令的睡眠分段，以及健康导出的文件；网页不会直接读取手表。核心、深度、REM 和清醒会进入角色可读摘要，缺失值不当成 0。</p>
  <label className="block">归档方式<select className={inputClass} disabled={busy} value={charId} onChange={e=>setCharId(e.target.value)}><option value="">我自己记录</option>{eligible.map(c=><option key={c.id} value={c.id}>让 {c.name} 代记（生成确认卡片）</option>)}</select></label>
  <p className="text-xs">让角色了解睡眠：在角色设置 → 生活记录，开启总开关及“睡眠记录”。它读取已导入摘要，不代表实时监测；关闭睡眠开关即可停止后续注入。</p>
  <label className="block">入睡时间<input className={inputClass} type="datetime-local" disabled={busy} value={start} onChange={e=>setStart(e.target.value)} /></label><label className="block">醒来时间<input className={inputClass} type="datetime-local" disabled={busy} value={end} onChange={e=>setEnd(e.target.value)} /></label><label className="block">睡眠备注<input className={inputClass} disabled={busy} value={note} maxLength={1000} onChange={e=>setNote(e.target.value)} /></label>
@@ -37,6 +43,6 @@ export default function SleepRecordPanel({records,onReload,onRemove}:{records:Li
  {busy && <p role="status">正在处理睡眠记录…</p>}{error && <p role="alert" className="text-red-700">{error}</p>}{notice && <p role="status">{notice}</p>}
  <div className="rounded-2xl border border-violet-200 bg-white p-4 space-y-3"><h3 className="font-bold">已记录的睡眠 · {entries.length} 条</h3><button className="rounded-xl border border-violet-300 p-2" disabled={busy||!entries.length} onClick={()=>void action(async()=>{await shareOrDownloadBlob({blob:new Blob([JSON.stringify({records:entries.map(r=>r.payload)},null,2)],{type:'application/json'}),fileName:'SullyOS-sleep-records.json',preferDownloadOnWeb:true});})}>导出睡眠记录</button>
  {!entries.length && <p className="text-xs">还没有记录。可以手动填写、导入文件，或在聊天中告诉角色明确的入睡和醒来时间。</p>}
- {entries.slice(0,60).map(record=><div className="border-t border-violet-100 pt-3 space-y-1" key={record.id}><strong>{record.date}</strong><p>{sleepSummary(record.payload)}</p><p className="text-xs">{record.payload.source}{record.recordedBy!=='user'?` · ${record.recordedByName || '角色'}代记` : ''}{record.reviewStatus==='active'?' · 待确认':''}</p>{(['coreMinutes','deepMinutes','remMinutes','awakeMinutes'] as const).some(k=>record.payload[k]!==undefined)&&<p className="text-xs">{(['coreMinutes','deepMinutes','remMinutes','awakeMinutes'] as const).filter(k=>record.payload[k]!==undefined).map(k=>`${({coreMinutes:'核心',deepMinutes:'深睡',remMinutes:'REM',awakeMinutes:'清醒'})[k]} ${record.payload[k]} 分钟`).join(' · ')}</p>}{record.payload.note && <p className="text-xs">{record.payload.note}</p>}<button className="text-xs underline" disabled={busy} onClick={()=>{if(window.confirm('删除这条睡眠记录？'))void action(()=>onRemove(record));}}>删除睡眠记录</button></div>)}{entries.length>60 && <p className="text-xs">显示最近 60 条；导出文件包含全部记录。</p>}
+ {entries.slice(0,60).map(record=><div className="border-t border-violet-100 pt-3 space-y-1" key={record.id}><strong>{record.date}</strong><p>{sleepSummary(record.payload,false)}</p><p className="text-xs leading-relaxed rounded-xl bg-violet-50 p-3">{sleepStageSummary(record.payload)}</p><p className="text-xs">{record.payload.source}{record.recordedBy!=='user'?` · ${record.recordedByName || '角色'}代记` : ''}{record.reviewStatus==='active'?' · 待确认':''}</p>{record.payload.note && <p className="text-xs">{record.payload.note}</p>}<button className="text-xs underline" disabled={busy} onClick={()=>{if(window.confirm('删除这条睡眠记录？'))void action(()=>onRemove(record));}}>删除睡眠记录</button></div>)}{entries.length>60 && <p className="text-xs">显示最近 60 条；导出文件包含全部记录。</p>}
  </div></section>;
 }

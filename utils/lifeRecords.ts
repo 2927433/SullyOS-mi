@@ -1,5 +1,5 @@
 import {buildHealthSummary,healthSleepSummary} from './userHealth';
-import { sleepPayload, sleepDate, sleepSummary, sameSleep } from './sleepRecords';
+import { sleepPayload, sleepDate, sleepSummary, SLEEP_ANALYSIS_GUIDE, sameSleep } from './sleepRecords';
 import { withReplyCancellation, type ReplyRun } from './chatReplyCancellation';
 
 import { DB } from './db';
@@ -413,7 +413,7 @@ export const buildLifeRecordInjection = async (
     if(moduleActive('health')) dataLines.push(await buildHealthSummary(!moduleActive('sleep')));
     if (moduleActive('sleep')) {
         const snapshot=await DB.getAssetRaw('health_shortcut_snapshot_v1');
-        dataLines.push('- 睡眠记录（已记录的数据，不代表实时手表状态）：'+healthSleepSummary(records.filter(r=>r.date<=today),snapshot)+'。不能据此推测 TA 此刻已睡着或醒来。');
+        dataLines.push('- 睡眠记录（已记录的数据，不代表实时手表状态）：'+healthSleepSummary(records.filter(r=>r.date<=today),snapshot)+'。不能据此推测 TA 此刻已睡着或醒来。'+SLEEP_ANALYSIS_GUIDE);
     }
     s += `${dataLines.join('\n')}\n`;
     if (forFirePack) {
