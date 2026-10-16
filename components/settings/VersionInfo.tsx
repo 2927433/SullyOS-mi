@@ -1,3 +1,4 @@
+import {MI_RELEASE_ID} from '../../utils/miRelease';
 import MiReleaseNotes from '../os/MiReleaseNotes';
 import React, { useEffect, useRef, useState } from 'react';
 import { querySwVersion } from '../../utils/swVersion';
@@ -115,7 +116,7 @@ const VersionInfo: React.FC = () => {
                     {hint}
                 </div>
             )}
-            <button type="button" onClick={()=>setShowMiRelease(true)} className="text-xs text-amber-700 underline py-3">查看二改更新公告 · mi-v17</button>
+            <button type="button" onClick={()=>setShowMiRelease(true)} className="text-xs text-amber-700 underline py-3">查看二改更新公告 · {MI_RELEASE_ID}</button>
             {showMiRelease&&<MiReleaseNotes onClose={()=>setShowMiRelease(false)}/>}
             <AndroidUpdateControl />
             <div className="mt-3 w-full max-w-md text-xs text-slate-500">

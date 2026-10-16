@@ -1,3 +1,4 @@
+import {repairClearGlassBackground} from '../utils/clearGlassBackground';
 import ChatRecordSearch from '../components/chat/ChatRecordSearch';
 import {avatarFrameLayer} from '../utils/avatarFrameTarget';
 import ChatRuntimeStyle from '../components/chat/ChatRuntimeStyle';
@@ -3623,7 +3624,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
     const finalRootClass = acnh ? acnhRootClass : chatRootClass;
     // 动森下强制覆盖角色自定义聊天背景，保证整机一致的彩蛋观感
     // 进入/切换的过场由 CharacterEntryTransition 覆盖层负责，根容器不再自己做淡入。
-    const finalRootStyle = acnh ? acnhRootStyle : chatRootStyle;
+    const finalRootStyle: React.CSSProperties = acnh ? acnhRootStyle : {...chatRootStyle, '--sully-clear-glass-image': resolvedChatBackground ? `url("${resolvedChatBackground}")` : undefined} as React.CSSProperties;
     // 聊天细节微调（外观 → 聊天细节，全局打底；角色开了「聊天装扮」时逐字段覆盖）：
     // CSS 全默认时为空串不注入；chatModuleAlign 不走 CSS，作为布局属性传给 MessageItem。
     const mergedFineTune = useMemo(() => mergeChatFineTune(osTheme, homePhone?undefined:char?.chatFineTune), [osTheme, char?.chatFineTune,!!homePhone]);
@@ -3647,8 +3648,8 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
                  守护样式统一放在气泡主题 customCss 之后（见下），保证对所有用户 CSS 都能兜底。 */}
              {/* 心象卡片自定义 CSS（per-character）：作用于 .sully-psyche-* 各零件，编辑入口在个性装扮 / 聊天装扮的心象分栏 */}
              {!homePhone && resolvePsycheAppearance(osTheme, char).customCss && <style>{resolvePsycheAppearance(osTheme, char).customCss}</style>}
-             {osTheme.chatChromeCustomCss && <BlobRefStyle css={osTheme.chatChromeCustomCss}/>}
-             {!homePhone && char.chromeCustomCss && <BlobRefStyle css={char.chromeCustomCss}/>}
+             {osTheme.chatChromeCustomCss && <BlobRefStyle css={repairClearGlassBackground(osTheme.chatChromeCustomCss)}/>}
+             {!homePhone && char.chromeCustomCss && <BlobRefStyle css={repairClearGlassBackground(char.chromeCustomCss)}/>}
              {scheduleChangeNotice && (
                <ScheduleChangeNotice
                  key={scheduleChangeNotice.eventId}
