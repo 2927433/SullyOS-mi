@@ -1,0 +1,7 @@
+.solo-diary-panel button{cursor:pointer;border:0;background:transparent;color:inherit;font-family:inherit}
+.solo-diary-panel button:disabled{opacity:.5;cursor:wait}
+.solo-diary-panel summary{cursor:pointer;font-size:13px;line-height:1.8}
+.solo-diary-settings input:not([type=checkbox]),.solo-diary-settings select{max-width:100%;box-sizing:border-box;font-family:inherit;color:#554735;background:#fff}
+.solo-diary-settings button{cursor:pointer;white-space:normal;overflow-wrap:anywhere}
+.solo-diary-settings label{line-height:1.8}
+.solo-diary-settings{overflow-wrap:anywhere}

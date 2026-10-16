@@ -1,3 +1,4 @@
+import SoloDiaryRuntime from './journal/SoloDiaryRuntime';
 import HealthShortcutReceiver from './lifeRecord/HealthShortcutReceiver';
 import FirstUseGuide from './FirstUseGuide';
 import FeedbackInvitation from './FeedbackInvitation';
@@ -1105,6 +1106,7 @@ const PhoneShell: React.FC = () => {
        )}
 
        <HealthShortcutReceiver />
+       <SoloDiaryRuntime />
        {/* 见面 · 剧情首映：解锁后一次性出现 */}
        {!anniversaryHasPriority && !showDisclaimer && !showImportRecoveryPrompt && !showAuthorLetter && showUpdateNotification && (
          <UpdateNotificationController onClose={() => setShowUpdateNotification(false)} />

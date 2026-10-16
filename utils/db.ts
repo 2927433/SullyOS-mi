@@ -1454,6 +1454,18 @@ export const DB = {
     });
   },
 
+  // Atomic local ledger updates: claim daily generation before making a paid call.
+  mutateAsset: async (id: string, update: (current: string | null) => string): Promise<string> => {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_ASSETS, 'readwrite'), store = tx.objectStore(STORE_ASSETS);
+      let next = ''; const request = store.get(id);
+      request.onsuccess = () => { try { next = update(request.result?.data ?? null); store.put({id, data: next}); } catch (error) { tx.abort(); reject(error); } };
+      tx.oncomplete = () => resolve(next);
+      tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error || new Error('Asset update aborted'));
+    });
+  },
+
   getAsset: async (id: string): Promise<string | null> => {
       const db = await openDB();
       return new Promise((resolve, reject) => {
