@@ -1,3 +1,5 @@
+import SparkFriendsEditor from '../components/social/SparkFriendsEditor';
+import {sparkSpacePosts,sparkFriendContext,resolveSpaceAuthor,sparkInteractions,sparkFriendLikes,sparkFriendDraft} from '../utils/sparkSpaces';
 import { ContextBuilder } from '../utils/context';
 import { loadCharacterContextMessages } from '../utils/chatContextRange';
 
@@ -5,7 +7,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useOS } from '../context/OSContext';
 import { DB } from '../utils/db';
 import { CharacterProfile, SocialPost, SocialComment, SubAccount, SocialAppProfile } from '../types';
-import { buildSparkCommentHistory, buildSparkGenerationContext, resolveSparkAuthor, selectSparkParticipants } from '../utils/socialGeneration';
+import { buildSparkCommentHistory, buildSparkGenerationContext } from '../utils/socialGeneration';
 import { processImageToBlob } from '../utils/file';
 import { putImageBlob } from '../utils/blobRef';
 import Modal from '../components/os/Modal';
@@ -157,6 +159,9 @@ const Icons = {
 const SocialApp: React.FC = () => {
     const { closeApp, characters, updateCharacter, apiConfig, addToast, userProfile, groups, characterGroups } = useOS();
     const [feed, setFeed] = useState<SocialPost[]>([]);
+    const [spaceId,setSpaceId]=useState(()=>localStorage.getItem('spark_space_id') || characters[0]?.id || '');
+    const spaceChar=characters.find(c=>c.id===spaceId);
+    const visibleFeed=sparkSpacePosts(feed,spaceId);
     // Modes: 'home' (Feed) | 'me' (Profile) | 'create' (Modal Overlay)
     const [activeTab, setActiveTab] = useState<'home' | 'me'>('home');
     useAppShortcut(ShortcutAppID.Social, intent => { setSelectedPost(null); setIsCreateOpen(false); setShowSettings(false); setActiveTab(intent.entryId === 'me' ? 'me' : 'home'); });
@@ -209,6 +214,13 @@ const SocialApp: React.FC = () => {
     const refreshRequestRef = useRef<AbortController | null>(null);
     const commentRequestRef = useRef<{ postId: string; controller: AbortController } | null>(null);
     const replyRequestRef = useRef<{ postId: string; controller: AbortController } | null>(null);
+
+    useEffect(()=>{
+        localStorage.setItem('spark_space_id',spaceId);
+        refreshRequestRef.current?.abort();commentRequestRef.current?.controller.abort();replyRequestRef.current?.controller.abort();
+        refreshRequestRef.current=null;commentRequestRef.current=null;replyRequestRef.current=null;
+        setSelectedPost(null);setIsCreateOpen(false);setIsRefreshing(false);setLoadingComments(false);setIsReplyingToUser(false);
+    },[spaceId]);
 
     useEffect(() => {
         mountedRef.current = true;
@@ -435,7 +447,7 @@ const SocialApp: React.FC = () => {
     const buildGenerationContext = async (participants: CharacterProfile[]) => {
         const recent = await Promise.all(participants.map(async char =>
             [char.id, await loadCharacterContextMessages(char)] as const));
-        return buildSparkGenerationContext(participants.map(char => ({ ...char, mountedWorldbooks: [] })), userProfile, socialProfile, characterHandles, Object.fromEntries(recent));
+        return sparkFriendContext(participants[0])+"\n"+await buildSparkGenerationContext(participants.map(char => ({ ...char, mountedWorldbooks: [] })), userProfile, socialProfile, characterHandles, Object.fromEntries(recent));
     };
 
     const buildGenerationMessages = (members: CharacterProfile[], context: string, prompt: string) => {
@@ -447,6 +459,7 @@ const SocialApp: React.FC = () => {
 
     const handleRefresh = async () => {
 
+        if (!spaceChar) {addToast('请选择一个角色空间，旧记录不参与生成','info');return;}
         if (!apiConfig.apiKey) { addToast('请配置 API Key', 'error'); return; }
         if (refreshRequestRef.current) return;
         const controller = new AbortController();
@@ -454,43 +467,13 @@ const SocialApp: React.FC = () => {
         setIsRefreshing(true);
         trackEvent('刷新 Spark 推荐流');
         try {
-            const shuffledChars = [...characters].sort(() => 0.5 - Math.random());
-            const selectedChars = shuffledChars.slice(0, Math.min(3, characters.length));
+            const selectedChars = [spaceChar];
             
             const context = await buildGenerationContext(selectedChars);
             if (controller.signal.aborted) return;
 
-            const prompt = `### 任务: 模拟社交APP "Spark" 的推荐流
-你需要生成 6-8 条新的社交媒体帖子。
-
-### 🎭 内容构成 (混合模式)
-1. **角色发帖 (30%)**: 
-   - 选中的角色: ${selectedChars.map(c => c.name).join(', ')}
-   - **关键规则**: 每个角色有多个马甲(账号)。请根据内容需要，选择最合适的账号身份发帖。
-   - 例如：如果是吐槽，可能用小号；如果是发美照，用大号。请务必使用 **Configured Handle (网名)**。
-   - **内容方向**: 公开发言，生活日常、吐槽、或者暗戳戳的记录。
-
-2. **路人/网友发帖 (70%)**: 
-   - 模拟真实的互联网生态：吃瓜群众、技术宅、美妆博主、情感树洞。
-
-### 🚫 绝对禁令
-1. **禁止扮演用户**: 用户的网名是 "${socialProfile.name}"。绝对禁止生成 \`authorName\` 等于或近似 "${socialProfile.name}" 的帖子（无论是角色帖还是路人帖）。如果你想用类似的名字，请改成完全不同的网名。
-2. **路人不得冒用身份**: 路人的 \`authorName\` 必须是全新的网名，绝对不能与上方【角色身份表】中列出的任何【网名】重合。
-3. **禁止上帝视角**。
-
-### 输出格式 (JSON Array)
-[
-  {
-    "isCharacter": true/false,
-    "charId": "如果是角色填ID, 否则null", 
-    "authorName": "必须填身份表中定义的【网名】",
-    "title": "简短吸睛的标题",
-    "content": "正文内容...",
-    "emojis": ["🎈", "✨"],
-    "likes": 随机数 (0 - 10000)
-  },
-  ...
-]`;
+            const prompt = `请为当前唯一角色生成 2—4 条朋友圈动态，只能由该角色自己的已配置账号发帖，不生成陌生人帖子。依据当前人设和世界书，不能串入其他世界观。每条可包含 0—4 个已确认朋友的评论和点赞；没有名单就留空，不为了热闹补造人。禁止代替用户发言，不泄露近期私聊原文。
+输出 JSON 数组：[{"charId":"当前角色ID","authorName":"当前角色账号","isCharacter":true,"title":"标题","content":"正文","emojis":["✨"],"likedBy":["已确认朋友姓名"],"comments":[{"author":"已确认朋友姓名","charId":null,"content":"符合原作关系及口吻的评论"}]}]`;
             const response = await fetch(`${apiConfig.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiConfig.apiKey}` },
@@ -506,8 +489,8 @@ const SocialApp: React.FC = () => {
             
             const newPosts: SocialPost[] = json
                 .flatMap((item: any) => {
-                const author = resolveSparkAuthor(item, selectedChars, characters, characterHandles, [socialProfile.name, userProfile.name]);
-                if (!author || typeof item.content !== 'string' || !item.content.trim()) return [];
+                const author = resolveSpaceAuthor(item, spaceChar!, characterHandles, [socialProfile.name, userProfile.name]);
+                if (!author?.character || typeof item.content !== 'string' || !item.content.trim()) return [];
                 item = { ...item, authorName: author.name };
                 let avatar = `https://api.dicebear.com/7.x/notionists/svg?seed=${item.authorName}`;
                 const matchedChar = author.character;
@@ -527,10 +510,12 @@ const SocialApp: React.FC = () => {
                     title: typeof item.title === 'string' ? item.title : '无标题',
                     content: item.content || '...',
                     images,
-                    likes: item.likes || 0,
+                    sparkScopeCharId: spaceChar!.id,
+                    friendLikes: sparkFriendLikes(item.likedBy,spaceChar!),
+                    likes: sparkFriendLikes(item.likedBy,spaceChar!).length,
                     isCollected: false,
                     isLiked: false,
-                    comments: [],
+                    comments: sparkInteractions(item.comments,spaceChar!,characterHandles,[socialProfile.name,userProfile.name]),
                     timestamp: Date.now(),
                     tags: ['Life', 'Vlog'],
                     bgStyle: getRandomStyle().bg,
@@ -551,11 +536,12 @@ const SocialApp: React.FC = () => {
         }
     };
 
-    const generateComments = async (post: SocialPost) => {
+    const generateComments = async (post: SocialPost, force=false) => {
 
-        if (!post || !apiConfig.apiKey) return;
+        if (!post || !apiConfig.apiKey || !spaceChar || post.sparkScopeCharId!==spaceChar.id) return;
         const livePost = feedRef.current.find(item => item.id === post.id) || post;
-        if (livePost.comments.length > 0) return;
+        if (livePost.comments.length > 0 && !force) return;
+        if(post.authorType==='character' && !spaceChar.sparkFriends?.length){if(force)addToast('请先到管理中确认角色的社交网','info');return;}
         if (commentRequestRef.current?.postId === post.id) return;
         commentRequestRef.current?.controller.abort();
         const controller = new AbortController();
@@ -563,8 +549,7 @@ const SocialApp: React.FC = () => {
         post = livePost;
         setLoadingComments(true);
         try {
-            const shuffledChars = [...characters].sort(() => 0.5 - Math.random());
-            const selectedChars = selectSparkParticipants(post, shuffledChars, characterHandles);
+            const selectedChars = [spaceChar!];
             const context = await buildGenerationContext(selectedChars);
             if (controller.signal.aborted) return;
             
@@ -594,7 +579,7 @@ const SocialApp: React.FC = () => {
 ${post.content || '(楼主没写正文)'}
 """
 
-请基于上面的【标题 + 正文】生成 4-6 条评论，评论要切实回应正文里提到的内容，不要只对着标题空泛地说。混合使用 **选定角色** 和 **随机路人**。
+请基于上面的【标题 + 正文】生成 4-6 条评论，评论要切实回应正文里提到的内容，不要只对着标题空泛地说。只使用当前空间角色和已确认朋友，禁止随机路人。朋友根据原作关系互动，JSON 中增加 liked 布尔值表示是否点赞。
 角色评论时，请选择一个符合语境的马甲身份。
 
 ### 禁令
@@ -619,7 +604,7 @@ ${post.content || '(楼主没写正文)'}
             if (Array.isArray(json)) {
                 const comments: SocialComment[] = json
                     .flatMap((c: any) => {
-                        const author = resolveSparkAuthor(c, selectedChars, characters, characterHandles, [socialProfile.name, userProfile.name]);
+                        const author = resolveSpaceAuthor(c, spaceChar!, characterHandles, [socialProfile.name, userProfile.name]);
                         if (!author || typeof c.content !== 'string' || !c.content.trim()) return [];
                         const authorName = author.name;
                         let avatar = `https://api.dicebear.com/7.x/notionists/svg?seed=${authorName}`;
@@ -630,9 +615,9 @@ ${post.content || '(楼主没写正文)'}
                             authorName: authorName,
                             authorAvatar: avatar,
                             content: c.content || '...',
-                            likes: Math.floor(Math.random() * 100),
+                            likes: 0,
                             isCharacter: !!char,
-                            authorType: char ? 'character' : 'stranger',
+                            authorType: char ? 'character' : 'friend',
                             authorCharId: char?.id,
                         } as SocialComment];
                     });
@@ -640,6 +625,8 @@ ${post.content || '(楼主没写正文)'}
                 updatePostInFeed(post.id, current => ({
                     ...current,
                     comments: mergeSocialComments(current.comments || [], comments),
+                    friendLikes: [...new Set([...(current.friendLikes||[]),...sparkFriendLikes(json.filter((c:any)=>c.liked===true).map((c:any)=>c.authorName??c.author),spaceChar!)])],
+                    likes: [...new Set([...(current.friendLikes||[]),...sparkFriendLikes(json.filter((c:any)=>c.liked===true).map((c:any)=>c.authorName??c.author),spaceChar!)])].length+(current.isLiked?1:0),
                 }));
             }
         } catch (e: any) {
@@ -654,14 +641,14 @@ ${post.content || '(楼主没写正文)'}
 
     const generateRepliesToUser = async (post: SocialPost, userContent: string) => {
 
-        if (!apiConfig.apiKey) return;
+        if (!apiConfig.apiKey || !spaceChar || post.sparkScopeCharId!==spaceChar.id) return;
         if (replyRequestRef.current) return;
         const controller = new AbortController();
         replyRequestRef.current = { postId: post.id, controller };
         post = feedRef.current.find(item => item.id === post.id) || post;
         setIsReplyingToUser(true);
         try {
-            const selectedChars = selectSparkParticipants(post, [...characters].sort(() => 0.5 - Math.random()), characterHandles);
+            const selectedChars = [spaceChar!];
             const context = await buildGenerationContext(selectedChars);
             if (controller.signal.aborted) return;
 
@@ -711,7 +698,7 @@ ${buildSparkCommentHistory(post)}
             if (Array.isArray(json)) {
                 const newReplies: SocialComment[] = json
                     .flatMap((c: any) => {
-                        const author = resolveSparkAuthor(c, selectedChars, characters, characterHandles, [socialProfile.name, userProfile.name]);
+                        const author = resolveSpaceAuthor(c, spaceChar!, characterHandles, [socialProfile.name, userProfile.name]);
                         if (!author || typeof c.content !== 'string' || !c.content.trim()) return [];
                         const authorName = author.name;
                         let avatar = `https://api.dicebear.com/7.x/notionists/svg?seed=${authorName}`;
@@ -722,9 +709,9 @@ ${buildSparkCommentHistory(post)}
                             authorName: authorName,
                             authorAvatar: avatar,
                             content: `回复 @${socialProfile.name}: ${c.content}`,
-                            likes: Math.floor(Math.random() * 10),
+                            likes: 0,
                             isCharacter: !!char,
-                            authorType: char ? 'character' : 'stranger',
+                            authorType: char ? 'character' : 'friend',
                             authorCharId: char?.id,
                         } as SocialComment];
                     });
@@ -749,6 +736,7 @@ ${buildSparkCommentHistory(post)}
 
     const handleShare = async (targetId: string, isGroup: boolean) => {
         if (!selectedPost) return;
+        if(isGroup || targetId!==selectedPost.sparkScopeCharId){addToast('为保持隔离，只能分享给当前空间角色','info');return;}
         try {
             await DB.saveMessage({ charId: isGroup ? 'user' : targetId, groupId: isGroup ? targetId : undefined, role: 'user', type: 'social_card', content: '[分享帖子]', metadata: { post: selectedPost } });
             setShowShareModal(false);
@@ -758,8 +746,9 @@ ${buildSparkCommentHistory(post)}
     };
 
     const handleCreatePost = () => {
-        if (!newPostContent.trim()) return;
+        if (!newPostContent.trim() || !spaceChar) {addToast('请先选择角色空间','info');return;}
         const post: SocialPost = {
+            sparkScopeCharId: spaceChar!.id,
             id: `user-post-${Date.now()}`,
             authorName: socialProfile.name, // Use Local Identity
             authorAvatar: socialProfile.avatar, // Use Local Identity
@@ -787,6 +776,7 @@ ${buildSparkCommentHistory(post)}
     const handleDeletePost = (postId: string) => { removePostFromFeed(postId); addToast('帖子已删除', 'success'); trackEvent('删除一条帖子'); };
     const handleLike = (e: any, post: SocialPost) => {
         e.stopPropagation();
+        if(!spaceChar || post.sparkScopeCharId!==spaceChar.id)return;
         updatePostInFeed(post.id, current => ({
             ...current,
             isLiked: !current.isLiked,
@@ -796,7 +786,8 @@ ${buildSparkCommentHistory(post)}
     };
     
     const handleSendComment = async () => { 
-        if (!selectedPost || !commentInput.trim()) return; 
+        if (!selectedPost || !commentInput.trim()) return;
+        if(!spaceChar || selectedPost.sparkScopeCharId!==spaceChar.id){addToast('旧记录只读，请切换角色空间','info');return;} 
         if (commentRequestRef.current?.postId === selectedPost.id || replyRequestRef.current) return;
 
         const userComment: SocialComment = {
@@ -841,10 +832,12 @@ ${buildSparkCommentHistory(post)}
         setIsRefreshing(false);
         setLoadingComments(false);
         setIsReplyingToUser(false);
-        feedRef.current = [];
-        setFeed([]);
+        const deleting=sparkSpacePosts(feedRef.current,spaceId);
+        const ids=new Set(deleting.map(p=>p.id));
+        feedRef.current=feedRef.current.filter(p=>!ids.has(p.id));
+        setFeed(feedRef.current);
         setSelectedPost(null);
-        DB.clearSocialPosts();
+        void Promise.all(deleting.map(p=>DB.deleteSocialPost(p.id))).catch(()=>addToast('清理失败，请重试','error'));
         setShowSettings(false);
         addToast('推荐流已清空', 'success');
         trackEvent('清空 Spark 推荐流');
@@ -919,6 +912,8 @@ ${buildSparkCommentHistory(post)}
                         <div className="p-6 space-y-4">
                             <h1 className="text-2xl font-black text-slate-900 leading-snug tracking-tight">{selectedPost.title}</h1>
                             <p className="text-[15px] text-slate-700 leading-relaxed whitespace-pre-wrap font-light">{selectedPost.content}</p>
+            {selectedPost?.sparkScopeCharId===spaceChar?.id && spaceChar && <div className="shrink-0 bg-white px-4 py-2 text-xs"><p>朋友点赞：{selectedPost?.friendLikes?.join('、')||'暂无'}</p><button disabled={loadingComments} className="mt-1 rounded-lg border p-2" onClick={()=>void generateComments(selectedPost!,true)}>刷新朋友互动</button></div>}
+
                             
                             <div className="flex gap-2 flex-wrap pt-2">
                                 {selectedPost.tags.map(t => <span key={t} className="text-xs font-bold text-blue-600 bg-blue-50/50 backdrop-blur-sm border border-blue-100 px-2.5 py-1 rounded-full">#{t}</span>)}
@@ -993,6 +988,15 @@ ${buildSparkCommentHistory(post)}
             {/* --- Modals (Settings, Share) --- */}
             <Modal isOpen={showSettings} title="身份管理" onClose={() => setShowSettings(false)}>
                 <div className="space-y-6">
+                    {spaceChar&&<SparkFriendsEditor char={spaceChar} onSave={friends=>updateCharacter(spaceChar.id,{sparkFriends:friends})} onExtract={async()=>{
+                        if(!apiConfig.apiKey)throw new Error('请先配置聊天 API');
+                        const core=await ContextBuilder.buildCoreContext({...spaceChar,mountedWorldbooks:[]},userProfile,false);
+                        const messages=buildGenerationMessages([spaceChar],core,'从提供的角色设定、世界书中提取已有姓名和明确关系的固定朋友或同伴。不得补充原文没有的人，不提取用户、机主或敌人，不凭模型常识补全原作。仅输出 JSON 数组 [{"name":"原文姓名","description":"原文支持的关系与性格","evidence":"含该姓名的逐字原文引句"}]。没有则 []。');
+                        const source=messages.filter(m=>m.role==='system').map(m=>m.content).join('\n');
+                        const response=await fetch(apiConfig.baseUrl.replace(/\/+$/,'')+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+apiConfig.apiKey},body:JSON.stringify({model:apiConfig.model,messages,temperature:0.1}),signal:AbortSignal.timeout(90000)});
+                        if(!response.ok)throw new Error(await apiErrorMessage(response));
+                        return sparkFriendDraft(safeParseJSON(extractContent(await safeResponseJson(response))),source);
+                    }}/>}
                     <div className="max-h-[50vh] overflow-y-auto no-scrollbar space-y-6 px-1">
                         <p className="text-xs text-slate-400 bg-slate-50 p-2 rounded-lg">
                             为角色添加“马甲”(Sub-Accounts)。AI 发帖时会根据内容选择合适的身份。
@@ -1046,7 +1050,7 @@ ${buildSparkCommentHistory(post)}
                         ))}
                     </div>
                     <div className="flex gap-3 pt-2">
-                        <button onClick={handleClearFeed} className="flex-1 py-3 bg-white border border-slate-200 text-slate-500 font-bold rounded-xl text-xs active:bg-slate-50">清空推荐流</button>
+                        <button onClick={handleClearFeed} className="flex-1 py-3 bg-white border border-slate-200 text-slate-500 font-bold rounded-xl text-xs active:bg-slate-50">清空当前空间记录</button>
                         <button onClick={() => setShowSettings(false)} className="flex-1 py-3 bg-[#ff2442] text-white font-bold rounded-xl text-xs shadow-lg shadow-red-200 active:scale-95 transition-transform">完成</button>
                     </div>
                 </div>
@@ -1056,7 +1060,7 @@ ${buildSparkCommentHistory(post)}
                 {/* 分组筛选（没建分组时不渲染） */}
                 <CharacterGroupFilterBar characters={characters} groups={characterGroups} value={shareGroupId} onChange={setShareGroupId} className="mb-1 px-2" />
                 <div className="grid grid-cols-4 gap-4 p-2">
-                    {filterCharactersByGroup(characters, characterGroups, shareGroupId).map(c => (
+                    {filterCharactersByGroup(characters, characterGroups, shareGroupId).filter(c=>c.id===selectedPost?.sparkScopeCharId).map(c => (
                         <button key={c.id} onClick={() => handleShare(c.id, false)} className="flex flex-col items-center gap-2 group">
                             <TokenImg value={c.avatar} className="w-12 h-12 rounded-full object-cover border border-slate-100 group-active:scale-90 transition-transform" />
                             <span className="text-[10px] text-slate-600 truncate w-full text-center">{c.name}</span>
@@ -1124,6 +1128,7 @@ ${buildSparkCommentHistory(post)}
                     内层保持 h-11 内容栏、文字居中。不能把 paddingTop 直接加到 h-11 上：border-box 会把 padding 吃进
                     固定高度，content-box 塌成 0，文字被挤到白条下沿、跨在白/渐变交界上被劈开。sticky 必须留在外层。 */}
                 <div className="sticky top-0 z-30 bg-white/60 backdrop-blur-xl border-b border-white/20" style={{ paddingTop: 'var(--safe-top)' }}>
+                    <div className="px-4 py-2 text-xs text-slate-500"><label>独立空间<select aria-label="Spark 角色空间" className="ml-2 max-w-[65%] rounded-lg border bg-white p-2" value={spaceId} onChange={e=>setSpaceId(e.target.value)}>{characters.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}<option value="">旧记录（只读）</option></select></label><p className="mt-1">{spaceChar?'仅当前角色与其已确认朋友参与，管理中可设置社交网。':'原有混合记录保留，不参与新生成。'}</p></div>
                     <div className="h-11 flex items-center justify-between px-4">
                         <button onClick={closeApp} className="p-1"><Icons.Back onClick={closeApp} /></button>
                         <div className="flex gap-6 text-base font-bold text-slate-300">
@@ -1153,7 +1158,7 @@ ${buildSparkCommentHistory(post)}
                             </div>
                             {/* 完整卡片占一个网格单元，避免多栏分片与 backdrop-filter/裁切组合丢失作者栏。 */}
                             <div className="grid grid-cols-2 items-start gap-x-2 gap-y-3 pb-24">
-                                {feed.map(post => renderFeedItem(post))}
+                                {visibleFeed.map(post => renderFeedItem(post))}
                             </div>
                         </div>
                     )}
@@ -1244,7 +1249,7 @@ ${buildSparkCommentHistory(post)}
 
                             <div className="p-2 min-h-[300px] bg-slate-50/50 pb-24">
                                 <div className="columns-2 gap-2 space-y-2">
-                                    {feed.filter(p => profileTab === 'notes' ? (p.authorType === 'user' || (!p.authorType && p.authorName === socialProfile.name)) : p.isCollected).map(post => (
+                                    {visibleFeed.filter(p => profileTab === 'notes' ? (p.authorType === 'user' || (!p.authorType && p.authorName === socialProfile.name)) : p.isCollected).map(post => (
                                         <div key={post.id} onClick={() => handleOpenPost(post)} className="break-inside-avoid bg-white rounded-xl overflow-hidden shadow-sm border border-slate-100 cursor-pointer">
                                             <div className="aspect-[4/5] flex items-center justify-center text-4xl" style={{ background: post.bgStyle }}>{codepointToEmoji(post.images[0])}</div>
                                             <div className="p-3">
@@ -1257,7 +1262,7 @@ ${buildSparkCommentHistory(post)}
                                         </div>
                                     ))}
                                 </div>
-                                {feed.filter(p => profileTab === 'notes' ? (p.authorType === 'user' || (!p.authorType && p.authorName === socialProfile.name)) : p.isCollected).length === 0 && (
+                                {visibleFeed.filter(p => profileTab === 'notes' ? (p.authorType === 'user' || (!p.authorType && p.authorName === socialProfile.name)) : p.isCollected).length === 0 && (
                                     <div className="flex flex-col items-center justify-center py-20 text-slate-300 gap-2">
                                         <Package size={48} className="text-slate-300 opacity-30" />
                                         <span className="text-xs">空空如也</span>

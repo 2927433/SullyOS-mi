@@ -2957,6 +2957,7 @@ export interface CharacterProfile {
   // 小红书 per-character toggle
   xhsEnabled?: boolean;
 
+  sparkFriends?: { name: string; description: string }[];
   socialProfile?: {
       handle: string;
       bio?: string;
@@ -3738,11 +3739,13 @@ export interface SocialComment {
     content: string;
     likes: number;
     isCharacter?: boolean;
-    authorType?: 'user' | 'character' | 'stranger';
+    authorType?: 'user' | 'character' | 'stranger' | 'friend';
     authorCharId?: string;
 }
 
 export interface SocialPost {
+    sparkScopeCharId?: string;
+    friendLikes?: string[];
     id: string;
     authorName: string;
     authorAvatar: string;
@@ -3756,7 +3759,7 @@ export interface SocialPost {
     timestamp: number;
     tags: string[];
     bgStyle?: string;
-    authorType?: 'user' | 'character' | 'stranger';
+    authorType?: 'user' | 'character' | 'stranger' | 'friend';
     authorCharId?: string;
 }
 

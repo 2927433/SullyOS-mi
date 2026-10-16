@@ -1,3 +1,4 @@
+import {normalizeGptImage,gptImageConnection,type GptImageSettings} from './gptImage';
 /** NovelAI uses its own image API, not OpenAI's /images endpoint. */
 export const NAI_ORIGIN = 'https://image.novelai.net';
 export const NAI_ASSET_ID = 'nai_workspace_v1';
@@ -49,6 +50,8 @@ export interface NaiSceneDetails { photoType?: 'selfie' | 'food' | 'scenery' | '
 export interface NaiRequest { input: string; model: string; action: string; parameters: Record<string, any> }
 export interface NaiState {
     version: 1;
+    provider?: 'nai' | 'gpt';
+    gptImage?: GptImageSettings;
     connection: { apiKey: string; baseUrl: string };
     promptApi?: { enabled: boolean; baseUrl: string; apiKey: string; model: string };
     model: string;
@@ -90,7 +93,7 @@ export function normalizeNaiState(value: any): NaiState {
                 referenceMode: normalizeReferenceMode(profile.referenceMode), references: normalizeReferences(profile.references) };
         }
     }
-    return { ...defaults, promptApi: { enabled: value.promptApi?.enabled === true, baseUrl: typeof value.promptApi?.baseUrl === 'string' ? value.promptApi.baseUrl : '', apiKey: typeof value.promptApi?.apiKey === 'string' ? value.promptApi.apiKey : '', model: typeof value.promptApi?.model === 'string' ? value.promptApi.model : '' }, model: typeof value.model === 'string' ? normalizeNaiModel(value.model) : defaults.model,
+    return { ...defaults, provider:value.provider==='gpt'?'gpt':'nai',gptImage:normalizeGptImage(value.gptImage), promptApi: { enabled: value.promptApi?.enabled === true, baseUrl: typeof value.promptApi?.baseUrl === 'string' ? value.promptApi.baseUrl : '', apiKey: typeof value.promptApi?.apiKey === 'string' ? value.promptApi.apiKey : '', model: typeof value.promptApi?.model === 'string' ? value.promptApi.model : '' }, model: typeof value.model === 'string' ? normalizeNaiModel(value.model) : defaults.model,
         parameters: value.parameters && typeof value.parameters === 'object' && !Array.isArray(value.parameters) ? structuredClone(value.parameters) : defaults.parameters,
         connection: { apiKey: typeof value.connection?.apiKey === 'string' ? value.connection.apiKey : '', baseUrl: typeof value.connection?.baseUrl === 'string' ? value.connection.baseUrl : NAI_ORIGIN },
         parameterProfiles: value.parameterProfiles && typeof value.parameterProfiles === 'object' && !Array.isArray(value.parameterProfiles) ? structuredClone(value.parameterProfiles) : {},
@@ -150,6 +153,7 @@ export function buildNaiRequest(state: NaiState, charId: string, scene: string, 
         const coordinate = (value: number | undefined) => typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.5;
         return { positive: joinTags(fixed.positive, action?.positive || ''), negative: joinTags(fixed.negative, action?.negative || ''), centers: [{ x: coordinate(action?.x), y: coordinate(action?.y) }] };
     });
+    if(state.provider==='gpt')return {input:positive,model:gptImageConnection(state.gptImage).model,action:'generate',parameters:{negative_prompt:negative,v4_prompt:{caption:{char_captions:captions.map(c=>({char_caption:c.positive}))}},v4_negative_prompt:{caption:{char_captions:captions.map(c=>({char_caption:c.negative}))}}}};
     const model = normalizeNaiModel(state.model);
     if (/^nai-diffusion-4/.test(model) && p.noise_schedule === 'native') throw new Error('V4 / V4.5 不使用 Native 噪声调度，请选择 Karras、Exponential 或 Polyexponential');
     let input = positive;
@@ -176,13 +180,13 @@ export function parseNaiRequest(text: string): NaiRequest {
     return validateNaiRequest(request);
 }
 export function exportNaiLibrary(state: NaiState): string {
-    const { connection, promptApi, ...library } = state;
+    const { connection, promptApi, gptImage, provider, ...library } = state;
     return JSON.stringify(library, null, 2);
 }
 export function importNaiLibrary(text: string, current: NaiState): NaiState {
     const imported = JSON.parse(text);
     if (imported.version !== 1) throw new Error('不支持这份 NAI 资料库版本');
-    const state = normalizeNaiState({ ...imported, connection: current.connection, promptApi: current.promptApi });
+    const state = normalizeNaiState({ ...imported, connection: current.connection, promptApi: current.promptApi, provider: current.provider, gptImage: current.gptImage });
     // Importing somebody's library must not enable paid automatic generation.
     for (const profile of Object.values(state.characters)) profile.auto = false;
     return state;
@@ -202,8 +206,10 @@ export function parseNaiSceneDetails(value: any): NaiSceneDetails {
 }
 export function naiSceneInstruction(state: NaiState, charId: string): string {
     const profile = state.characters[charId];
-    if (!state.connection.apiKey.trim() || !profile?.auto || !profile.positive.trim()) return '';
-    return `\n用户已为当前角色开启 NAI 生图。${getNaiSceneGuide(state)}\n当前角色 ID：${charId}。${profile.includeUser && state.characters.__user__?.positive.trim() ? '用户 ID：__user__，允许在合照中使用。' : '未配置用户生图档案，不能编造用户外观。'}${state.sceneGuide ? '\n用户的场景描述规则：\n' + state.sceneGuide : ''}\n程序输出契约：需要发图时，把上述 JSON 放在回复末尾 <nai_image>...</nai_image> 内，最多一次。不需要发图时不输出这个标签。额外规则只能调整画面内容，不能改成 image###Scene、imathink 或酒馆宏格式。固定外貌与画师组合由程序添加。只有系统返回图片才算发图成功。`;
+    let hasKey=!!state.connection.apiKey.trim();
+    if(state.provider==='gpt'){try{hasKey=!!gptImageConnection(state.gptImage).apiKey;}catch{hasKey=false;}}
+    if (!hasKey || !profile?.auto || !profile.positive.trim()) return '';
+    return `\n用户已为当前角色开启 ${state.provider==='gpt'?'GPT':'NAI'} 生图。${getNaiSceneGuide(state)}\n当前角色 ID：${charId}。${profile.includeUser && state.characters.__user__?.positive.trim() ? '用户 ID：__user__，允许在合照中使用。' : '未配置用户生图档案，不能编造用户外观。'}${state.sceneGuide ? '\n用户的场景描述规则：\n' + state.sceneGuide : ''}\n程序输出契约：需要发图时，把上述 JSON 放在回复末尾 <nai_image>...</nai_image> 内，最多一次。不需要发图时不输出这个标签。额外规则只能调整画面内容，不能改成 image###Scene、imathink 或酒馆宏格式。固定外貌与画师组合由程序添加。只有系统返回图片才算发图成功。`;
 }
 
 function normalizeNaiVibeGroups(value: unknown): NaiVibeGroup[] {

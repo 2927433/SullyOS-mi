@@ -2117,13 +2117,13 @@ export const useChatAI = ({
                 const latestNai = await replyStep(async () => loadNaiState());
                 if (naiSceneInstruction(latestNai, char.id)) {
                     try {
-                        addToast('角色正在使用 NAI 生图，请保持页面打开', 'info');
+                        addToast('角色正在使用 '+(latestNai.provider==='gpt'?'GPT':'NAI')+' 生图，请保持页面打开', 'info');
                         const compiled = await replyStep(() => draftNaiPrompt(currentNaiTurn(contextMsgs, naiReply.text), resolveNaiPromptApi(latestNai, apiConfig), char, userProfile, latestNai.sceneGuide, replyRun.signal, getNaiSceneGuide(latestNai)));
                         const request = buildNaiRequest({ ...latestNai, parameters: { ...latestNai.parameters, n_samples: 1 } }, char.id, compiled.scene, '', undefined, compiled.details);
                         const generated = await replyStep(async () => generateNaiImages(latestNai, request, replyRun.signal, { useSavedReferences: true, charId: char.id, omitPeople: !!compiled.details?.photoType && compiled.details.photoType !== 'selfie' }));
                         for (const image of generated) {
                             const id = await replyStep(async () => replyRun.saveMessage({ charId: char.id, role: 'assistant', type: 'image', content: image.token,
-                                metadata: { nai: { generationId: image.generationId, model: request.model, seed: request.parameters.seed } } }));
+                                metadata: { nai: { generationId: image.generationId, provider: image.provider||'nai', model: image.request.model, seed: image.request.parameters.seed } } }));
                             try { await replyStep(async () => saveNaiImageToAlbum(image, char.id, id)); }
                             catch (error) { replyRun.check(); addToast('图片已保存在聊天，相册保存失败', 'info'); }
                         }
@@ -2131,7 +2131,7 @@ export const useChatAI = ({
                     } catch (error) {
                         replyRun.check();
                         const reason = error instanceof Error ? error.message : '请求失败';
-                        await replyStep(async () => replyRun.saveMessage({ charId: char.id, role: 'system', type: 'text', content: `[NAI 生图失败：${reason}；未自动重试，可从＋菜单手动生图]` }));
+                        await replyStep(async () => replyRun.saveMessage({ charId: char.id, role: 'system', type: 'text', content: `[AI 生图失败：${reason}；未自动重试，可从＋菜单手动生图]` }));
                         setMessages(await replyStep(async () => DB.getRecentMessagesByCharId(char.id, 200)));
                     }
                 }

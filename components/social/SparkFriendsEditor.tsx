@@ -1,0 +1,8 @@
+import React,{useEffect,useState} from 'react';
+import type {CharacterProfile} from '../../types';
+import {parseSparkFriends} from '../../utils/sparkSpaces';
+export default function SparkFriendsEditor({char,onSave,onExtract}:{char:CharacterProfile;onSave:(friends:NonNullable<CharacterProfile['sparkFriends']>)=>void;onExtract:()=>Promise<string>}){
+ const[text,setText]=useState(''),[busy,setBusy]=useState(false),[notice,setNotice]=useState('');
+ useEffect(()=>{setText((char.sparkFriends||[]).map(f=>f.name+'|'+f.description).join('\n'));setNotice('');},[char.id]);
+ return <section className="space-y-2 border rounded-xl p-3 bg-rose-50/50"><h4 className="text-sm font-bold">{char.name}的社交网</h4><p className="text-xs text-slate-500">每行：姓名|关系、性格和说话方式。仅确认的名单参与点赞评论；不会自动把其他 char 当朋友。</p><textarea aria-label="角色社交网" className="w-full min-h-32 p-2 text-xs rounded-lg border" value={text} onChange={e=>setText(e.target.value)} placeholder="已有朋友姓名|原作关系与性格"/><div className="flex gap-2 flex-wrap"><button disabled={busy} className="text-xs bg-white border rounded-lg p-2" onClick={async()=>{setBusy(true);setNotice('');try{const draft=await onExtract();setText(draft);setNotice(draft?'已提取草稿，请核对后保存；尚未生效。':'未找到有原文依据的朋友，请手动填写。');}catch(e){setNotice(e instanceof Error?e.message:'提取失败');}finally{setBusy(false);}}}>{busy?'正在读取设定…':'从角色设定 / 世界书提取'}</button><button disabled={busy} className="text-xs bg-rose-500 text-white rounded-lg p-2" onClick={()=>{try{onSave(parseSparkFriends(text));setNotice('社交网已保存');}catch(e){setNotice((e as Error).message);}}}>确认保存社交网</button></div><p role="status" className="text-xs text-slate-500">{notice}</p></section>;
+}

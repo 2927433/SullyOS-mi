@@ -3865,7 +3865,7 @@ const Chat: React.FC<{homePhone?:HomePhoneChatProps}> = ({homePhone}) => {
             {naiOpen && char && <NaiWorkspace key={char.id} characterId={char.id} onClose={() => setNaiOpen(false)} onSendToChat={async image => {
                 const charId = char.id;
                 const id = await DB.saveMessage({ charId, role: 'assistant', type: 'image', content: image.token,
-                    metadata: { nai: { generationId: image.generationId, model: image.request.model, seed: image.request.parameters.seed } } });
+                    metadata: { nai: { generationId: image.generationId, provider: image.provider||'nai', model: image.request.model, seed: image.request.parameters.seed } } });
                 try { await saveNaiImageToAlbum(image, charId, id); } catch { addToast('图片已发到聊天，相册保存失败，可在生图面板保存原图', 'info'); }
                 await reloadMessages(visibleCountRef.current);
             }} />}

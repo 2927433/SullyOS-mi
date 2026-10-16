@@ -1,3 +1,4 @@
+import {requestGptImage,normalizeGptImage} from './gptImage';
 import JSZip from 'jszip';
 import { DB } from './db';
 import { putImageBlob } from './blobRef';
@@ -10,7 +11,7 @@ export async function loadNaiState(): Promise<NaiState> {
 }
 export async function saveNaiState(state: NaiState): Promise<void> {
     const normalized = normalizeNaiState(state);
-    normalized.connection.baseUrl = naiBaseUrl(normalized.connection.baseUrl);
+    if(normalized.provider!=='gpt')normalized.connection.baseUrl = naiBaseUrl(normalized.connection.baseUrl);
     normalized.connection.apiKey = normalized.connection.apiKey.trim().replace(/^Bearer\s+/i, '');
     await DB.saveAssetRaw(NAI_ASSET_ID, normalized);
 }
@@ -64,10 +65,20 @@ export async function decodeNaiImages(response: Response): Promise<Blob[]> {
     if (!files.length) throw new Error('NAI 返回的压缩包里没有图片');
     return Promise.all(files.map(async file => new Blob([new Uint8Array(await file.async('uint8array'))], { type: /\.webp$/i.test(file.name) ? 'image/webp' : /\.jpe?g$/i.test(file.name) ? 'image/jpeg' : 'image/png' })));
 }
-export interface NaiGeneratedImage { token: string; generationId: string; request: NaiRequest; blob: Blob }
+export interface NaiGeneratedImage { provider?:'nai'|'gpt'; gptRequest?:Record<string,unknown>; token: string; generationId: string; request: NaiRequest; blob: Blob }
 let running = false;
 export async function generateNaiImages(state: NaiState, request: NaiRequest, signal?: AbortSignal, options?: { useSavedReferences?: boolean; charId?: string; omitPeople?: boolean }): Promise<NaiGeneratedImage[]> {
-    if (running) throw new Error('已有一项 NAI 生图正在进行，请等待完成');
+    if (running) throw new Error('已有一项生图正在进行，请等待完成');
+    if(state.provider==='gpt'){
+        running=true;
+        try{
+            const captions=request.parameters?.v4_prompt?.caption?.char_captions || [];
+            const prompt=[request.input,...captions.map((c:any)=>'Character: '+c.char_caption),request.parameters?.negative_prompt?'Avoid: '+request.parameters.negative_prompt:'',...(request.parameters?.v4_negative_prompt?.caption?.char_captions||[]).map((c:any)=>'Character avoid: '+c.char_caption)].filter(Boolean).join('\n');
+            const result=await requestGptImage(normalizeGptImage(state.gptImage),prompt,signal);
+            const token=await putImageBlob(result.blob);
+            return [{provider:'gpt',gptRequest:result.request,token,generationId:crypto.randomUUID(),request:{input:prompt,model:String(result.request.model),action:'generate',parameters:{}},blob:result.blob}];
+        }finally{running=false;}
+    }
     validateNaiRequest(request);
     if (!state.connection.apiKey.trim()) throw new Error('先在设置 → NovelAI 生图填写并保存 Key');
     running = true;
@@ -112,6 +123,6 @@ export async function generateNaiImages(state: NaiState, request: NaiRequest, si
 export async function saveNaiImageToAlbum(image: NaiGeneratedImage, charId: string, sourceMessageId?: number): Promise<void> {
     if (!charId) throw new Error('请选择归属角色再保存相册');
     // Request metadata contains no credentials; the original image Blob is not recompressed.
-    await DB.saveAssetRaw(`nai_generation_${image.generationId}`, { provider: 'nai', charId, token: image.token, request: image.request });
-    await DB.saveGalleryImage({ id: `nai_${image.generationId}`, charId, url: image.token, timestamp: Date.now(), sourceMessageId, chatContext: [`[NAI] ${image.request.model}`, image.request.input] });
+    await DB.saveAssetRaw(`nai_generation_${image.generationId}`, { provider: image.provider||'nai', charId, token: image.token, request: image.gptRequest||image.request });
+    await DB.saveGalleryImage({ id: `nai_${image.generationId}`, charId, url: image.token, timestamp: Date.now(), sourceMessageId, chatContext: [`[${image.provider==='gpt'?'GPT':'NAI'}] ${image.request.model}`, image.request.input] });
 }
