@@ -10,5 +10,5 @@ export function diaryMonthGrid(month:string):(string|null)[]{
 export function moveDiaryMonth(month:string,delta:number){const date=new Date(month+'-01T12:00:00Z');date.setUTCMonth(date.getUTCMonth()+delta);return date.toISOString().slice(0,7);}
 export function filterSoloDiaries(entries:SoloDiaryEntry[],query:string,month?:string){
  const needle=query.trim().toLocaleLowerCase();
- return entries.filter(e=>(!month||e.date.startsWith(month))&&(!needle||(e.date+' '+(e.text||'')+' '+(e.error||'')).toLocaleLowerCase().includes(needle))).sort((a,b)=>b.date.localeCompare(a.date));
+ return entries.filter(e=>(!month||e.date.startsWith(month))&&(!needle||(e.date+' '+(e.text||'')+' '+(e.translation||'')+' '+(e.error||'')).toLocaleLowerCase().includes(needle))).sort((a,b)=>b.date.localeCompare(a.date));
 }
