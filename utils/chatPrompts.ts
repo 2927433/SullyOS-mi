@@ -1174,6 +1174,14 @@ ${voiceActingGuide()}`;
                 }
                 
                 if (m.type === 'image') {
+                     // Assistant image blocks are rejected by Claude-compatible upstreams.
+                     // Keep the sender and saved description, without changing stored images
+                     // or pretending the character's outgoing image was uploaded by the user.
+                     if (m.role === 'assistant') {
+                         const description = typeof m.metadata?.visionDescription === 'string'
+                             ? m.metadata.visionDescription.trim() : '';
+                         return { role: m.role, content: `${timeStr} [你向用户发送了一张图片${description ? '：' + description : '；未提供画面描述'}]`.trimStart() };
+                     }
                      const visionDescription = options?.useVisionDescriptions
                          && typeof m.metadata?.visionDescription === 'string'
                          ? m.metadata.visionDescription.trim()
