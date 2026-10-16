@@ -1530,14 +1530,15 @@ export const DB = {
               result=previous || structuredClone(input);
               const persist=()=>assets.put({id:SHIJI_ORDERS,data:[result,...orders.filter(o=>o.id!==result.id)]});
               if(share && result.sharedMessageId===undefined){
-                  if(!result.recipientId){tx.abort();return;}
+                  const targetId=result.paymentRequest?.payerId||result.recipientId;
+                  if(!targetId){tx.abort();return;}
                   const body=result.lines.map(line=>line.item.name+' ×'+line.quantity).join('、');
-                  const req=messages.add({charId:result.recipientId,role:'user',type:'text',timestamp:Date.now(),content:'[拾集'+(result.mode==='food'?'外卖':'购物')+'订单]\n收件人：'+result.recipientName+'\n'+body+'\n合计：¥'+(result.totalCents/100).toFixed(2)+(result.note?'\n留言：'+result.note:'')+'\n（小手机内订单，非真实配送）',metadata:{shijiOrder:result}});
-                  req.onsuccess=()=>{result={...result,sharedMessageId:Number(req.result)};clearStaleMemoryMirror(tx,result.recipientId,Number(req.result));persist();};
+                  const req=messages.add({charId:targetId,role:'user',type:'text',timestamp:Date.now(),content:(result.paymentRequest?'[拾集代付请求] 请你帮我代付这份订单，可以同意或拒绝。这是代付请求，不代表已经付款。\n':'')+'[拾集'+(result.mode==='food'?'外卖':'购物')+'订单]\n收件人：'+result.recipientName+'\n'+body+'\n合计：¥'+(result.totalCents/100).toFixed(2)+(result.note?'\n留言：'+result.note:'')+'\n（小手机内订单，非真实配送）',metadata:{shijiOrder:result}});
+                  req.onsuccess=()=>{result={...result,sharedMessageId:Number(req.result)};clearStaleMemoryMirror(tx,targetId,Number(req.result));persist();};
               }else persist();
           };
           tx.oncomplete=()=>{
-              if(result.sharedMessageId!==undefined){try{const key='mp_lastMsgId_'+result.recipientId;if(Number(localStorage.getItem(key)||0)>=result.sharedMessageId)localStorage.removeItem(key);}catch{/* Storage may be unavailable. */}}
+              if(result.sharedMessageId!==undefined){try{const key='mp_lastMsgId_'+(result.paymentRequest?.payerId||result.recipientId);if(Number(localStorage.getItem(key)||0)>=result.sharedMessageId)localStorage.removeItem(key);}catch{/* Storage may be unavailable. */}}
               resolve(result);
           };
           tx.onerror=()=>reject(tx.error || new Error('订单保存失败'));

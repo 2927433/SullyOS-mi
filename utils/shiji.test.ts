@@ -9,6 +9,18 @@ const char={id:'shiji-test-char',name:'角色甲'} as any;
 const items=()=>parseShijiCatalog(JSON.stringify({items:[{name:'热汤面',price:18.9,emoji:'🍜',shop:'巷口面馆',description:'热汤鲜面'}]}),'food');
 beforeEach(async()=>{vi.restoreAllMocks();vi.mocked(ContextBuilder.buildCharacterRequest).mockClear();await DB.deleteAsset(SHIJI_ORDERS);await DB.saveCharacter(char);});
 describe('拾集商品与订单',()=>{
+ it('为自己购物可发给另一个角色代付，收件人与代付对象不混淆，重复分享不重复创建',async()=>{
+  const payer={id:'payer-char',name:'代付角色'} as any;await DB.saveCharacter(payer);
+  const item={...items()[0],mode:'goods' as const};const order={...makeShijiOrder([{item,quantity:2}],'goods',undefined),paymentRequest:{payerId:payer.id,payerName:payer.name}};
+  await Promise.all([commitShijiOrder(order,true),commitShijiOrder(order,true)]);
+  const saved=(await loadShijiOrders())[0];expect(saved.recipientName).toBe('我自己');expect(saved.totalCents).toBe(3780);
+  const messages=(await DB.getMessagesByCharId(payer.id)).filter(m=>m.metadata?.shijiOrder?.id===order.id);expect(messages).toHaveLength(1);expect(messages[0].content).toContain('代付请求');expect(messages[0].content).toContain('不代表已经付款');
+  expect((await DB.getMessagesByCharId(char.id)).filter(m=>m.metadata?.shijiOrder?.id===order.id)).toHaveLength(0);
+ });
+ it('拒绝不存在的代付对象，不产生订单或聊天卡片',async()=>{
+  const item={...items()[0],mode:'goods' as const};const order={...makeShijiOrder([{item,quantity:1}],'goods',undefined),paymentRequest:{payerId:'missing-payer',payerName:'不存在'}};
+  await expect(commitShijiOrder(order,true)).rejects.toThrow('不存在');expect(await loadShijiOrders()).toHaveLength(0);
+ });
  it('价格转换为整数分，过滤非法价格和重复商品',()=>{
   const result=parseShijiCatalog(JSON.stringify({items:[{name:'杯子',price:19.9},{name:'杯子',price:20},{name:'坏价格',price:-3},{name:'超出精度',price:'1.001'}]}),'goods');expect(result).toHaveLength(1);expect(result[0].priceCents).toBe(1990);
  });

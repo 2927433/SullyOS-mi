@@ -46,7 +46,9 @@ export async function commitShijiOrder(order:ShijiOrder,share=false):Promise<Shi
  // Keep order economics validated even when called outside the UI.
  const valid=makeShijiOrder(order.lines,order.mode,order.recipientId?{id:order.recipientId,name:order.recipientName}:undefined,order.note);
  if(valid.totalCents!==order.totalCents)throw new Error('订单总额不一致，请重新确认');
- if(share&&!order.recipientId)throw new Error('请先选择接收订单的角色');
+ if(order.paymentRequest && (!order.paymentRequest.payerId||!order.paymentRequest.payerName))throw new Error('请选择代付角色');
+ if(order.paymentRequest && !(await DB.getAllCharacters()).some(c=>c.id===order.paymentRequest!.payerId))throw new Error('代付角色已不存在');
+ if(share&&!order.recipientId&&!order.paymentRequest?.payerId)throw new Error('请先选择接收订单的角色');
  if(order.recipientId && !(await DB.getAllCharacters()).some(c=>c.id===order.recipientId))throw new Error('该角色已不存在，请重新选择');
  return DB.commitShijiOrder(order,share);
 }

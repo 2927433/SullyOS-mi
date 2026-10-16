@@ -1,3 +1,5 @@
+import MiReleaseNotes from './os/MiReleaseNotes';
+import {MI_RELEASE_NOTICE_KEY} from '../utils/miRelease';
 import DecorationUpdatePopup from './chat/DecorationUpdatePopup';
 import UserHolidayIntro from './settings/UserHolidayIntro';
 import SmallUpdatesPopup, { SMALL_UPDATES_KEY } from './os/SmallUpdatesPopup';
@@ -618,6 +620,7 @@ const UserLocationAnnouncement: React.FC<UpdatePopupProps> = ({ onDone, onExit }
 };
 
 const UPDATE_QUEUE: { key: string; render: (props: UpdatePopupProps) => React.ReactNode }[] = [
+    {key:MI_RELEASE_NOTICE_KEY,render:props=><MiReleaseNotes onClose={()=>{markUpdateSeen(MI_RELEASE_NOTICE_KEY);props.onDone();}}/>},
     { key: USER_LOCATION_NOTICE_KEY, render: props => <UserLocationAnnouncement {...props} /> },
     { key: NAVIGATION_BALL_NOTICE_KEY, render: props => <NavigationBallAnnouncement {...props} /> },
     { key: HOME_UPDATE_KEY, render: props => <HomeUpdateAnnouncement {...props} /> },
