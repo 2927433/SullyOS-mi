@@ -1,5 +1,5 @@
 import {getSoloDiaryGuide,DEFAULT_SOLO_DIARY_GUIDE} from './soloDiaryGuide';
-import {DIARY_LANGUAGES,diaryTranslationLanguage,parseBilingualDiary} from './soloDiaryLanguage';
+import {DIARY_LANGUAGES,diaryTranslationLanguage,parseBilingualDiary,tryParseBilingualDiary} from './soloDiaryLanguage';
 import type {APIConfig, CharacterProfile, UserProfile} from '../types';
 import {DB} from './db';
 import {getScheduleDateKey, getScheduleWallClock} from './scheduleTime';
@@ -10,13 +10,31 @@ const SETTINGS='solo_diary_settings_v1';
 const announce=()=>{if(typeof window!=='undefined')window.dispatchEvent(new Event(SOLO_DIARY_EVENT));};
 export interface SoloDiaryRule {enabled:boolean;endTime:string;enabledAt:number;writingGuide?:string}
 export interface SoloDiarySettings {api:APIConfig|null;translationLanguage?:string;writingGuide?:string;rules:Record<string,SoloDiaryRule>}
-export interface SoloDiaryEntry {date:string;status:'writing'|'done'|'error'|'deleted';text?:string;language?:string;translation?:string;translationLanguage?:string;translationStatus?:'writing'|'error';translationStartedAt?:number;error?:string;startedAt:number;completedAt?:number}
+export interface SoloDiaryEntry {date:string;status:'writing'|'done'|'error'|'deleted';text?:string;rawStructuredResponse?:string;language?:string;translation?:string;translationLanguage?:string;translationStatus?:'writing'|'error';translationStartedAt?:number;error?:string;startedAt:number;completedAt?:number}
 export function readSoloDiarySettings():SoloDiarySettings {
  try {const s=JSON.parse(localStorage.getItem(SETTINGS)||'{}');return {api:s.api?.baseUrl?normalizeApiConfig(s.api):null,translationLanguage:diaryTranslationLanguage(s.translationLanguage),writingGuide:typeof s.writingGuide==='string'?s.writingGuide.slice(0,20000):undefined,rules:s.rules||{}};}catch{return {api:null,rules:{}};}
 }
 export function saveSoloDiarySettings(s:SoloDiarySettings){localStorage.setItem(SETTINGS,JSON.stringify(s));announce();}
 export const soloDiaryKey=(id:string)=>'solo_diary_ledger_v1_'+id;
-export async function readSoloDiaries(id:string):Promise<Record<string,SoloDiaryEntry>>{return JSON.parse(await DB.getAsset(soloDiaryKey(id))||'{}');}
+function recoverDiaryEntries(entries:Record<string,SoloDiaryEntry>){
+ for(const entry of Object.values(entries)){
+  if(entry.status!=='done'||!entry.text)continue;
+  const recovered=tryParseBilingualDiary(entry.text);
+  if(!recovered)continue;
+  entry.rawStructuredResponse??=entry.text;
+  entry.text=recovered.text;
+  entry.language??=recovered.language;
+  if(!entry.translation&&recovered.translation){entry.translation=recovered.translation;entry.translationLanguage=recovered.translationLanguage;delete entry.translationStatus;}
+ }
+ return entries;
+}
+export async function readSoloDiaries(id:string):Promise<Record<string,SoloDiaryEntry>>{
+ const raw=await DB.getAsset(soloDiaryKey(id))||'{}';
+ const entries=recoverDiaryEntries(JSON.parse(raw));
+ if(JSON.stringify(entries)===raw)return entries;
+ // Recover atomically without overwriting concurrent diary writes.
+ return JSON.parse(await DB.mutateAsset(soloDiaryKey(id),current=>JSON.stringify(recoverDiaryEntries(JSON.parse(current||'{}')))));
+}
 export function diaryDateAt(char:CharacterProfile,endTime:string,base=new Date()):string{
  const wall=getScheduleWallClock(char,base),today=getScheduleDateKey(char,base);
  const [h,m]=endTime.split(':').map(Number);
@@ -36,7 +54,7 @@ ${logs||'这一天没有可用聊天记录。'}
 聊天中的图片标记不是画面描述，不猜测图像。不要照着对话顺序改写日记，不冒用其它角色的历史。
 【双语输出格式】
 原文用角色习惯的语言，同时在这一次请求生成完整的${DIARY_LANGUAGES[diaryTranslationLanguage(translationLanguage)]}译文。译文忠实保留语气、段落与事实，不续写。
-只输出 JSON：{"language":"原文语言代码，如 en","text":"原文全文","translationLanguage":"${diaryTranslationLanguage(translationLanguage)}","translation":"译文全文"}。不输出思考过程或工具指令。JSON 字符串正确转义换行。`;}
+只输出 JSON：{"language":"原文语言代码，如 en","text":"原文全文","translationLanguage":"${diaryTranslationLanguage(translationLanguage)}","translation":"译文全文"}。不输出思考过程或工具指令。JSON 字符串必须正确转义换行和正文中的双引号，不要添加 Markdown 代码围栏。`;}
 export async function generateSoloDiary(char:CharacterProfile,user:UserProfile,defaultApi:APIConfig,date:string,retry=false){
  const settings=readSoloDiarySettings(),api=settings.api||defaultApi;
  if(!api.baseUrl||!api.model)throw new Error('请先配置日记 API 或全局 API');
@@ -72,7 +90,7 @@ export async function translateSoloDiary(charId:string,date:string,defaultApi:AP
  const settings=readSoloDiarySettings(),api=settings.api||defaultApi,target=diaryTranslationLanguage(settings.translationLanguage);
  if(!api.baseUrl||!api.model)throw new Error('请先配置日记 API');
  let claimed=false,source='';
- await DB.mutateAsset(soloDiaryKey(charId),raw=>{const all=JSON.parse(raw||'{}'),entry=all[date];
+ await DB.mutateAsset(soloDiaryKey(charId),raw=>{const all=recoverDiaryEntries(JSON.parse(raw||'{}')),entry=all[date];
   if(entry?.status!=='done'||!entry.text||entry.translation||(entry.translationStatus==='writing'&&Date.now()-(entry.translationStartedAt||0)<240000))return JSON.stringify(all);
   source=entry.text;entry.translationStatus='writing';entry.translationStartedAt=Date.now();claimed=true;return JSON.stringify(all);});
  if(!claimed)return;announce();
@@ -81,7 +99,7 @@ export async function translateSoloDiary(charId:string,date:string,defaultApi:AP
   if(!response.ok)throw new Error('翻译请求失败（HTTP '+response.status+'），未自动重试');
   const result=await response.json(),translation=result.choices?.[0]?.message?.content;
   if(typeof translation!=='string'||!translation.trim())throw new Error('翻译没有返回正文');
-  await DB.mutateAsset(soloDiaryKey(charId),raw=>{const all=JSON.parse(raw||'{}'),entry=all[date];if(entry?.status==='done'&&entry.text===source){entry.translation=translation.trim();entry.translationLanguage=target;delete entry.translationStatus;}return JSON.stringify(all);});
+  await DB.mutateAsset(soloDiaryKey(charId),raw=>{const all=recoverDiaryEntries(JSON.parse(raw||'{}')),entry=all[date];if(entry?.status==='done'&&entry.text===source){entry.translation=translation.trim();entry.translationLanguage=target;delete entry.translationStatus;}return JSON.stringify(all);});
  }catch(error){await DB.mutateAsset(soloDiaryKey(charId),raw=>{const all=JSON.parse(raw||'{}');if(all[date]?.status==='done')all[date].translationStatus='error';return JSON.stringify(all);});throw error;}
  finally{announce();}
 }
