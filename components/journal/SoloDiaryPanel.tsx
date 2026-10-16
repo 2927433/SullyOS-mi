@@ -1,3 +1,7 @@
+import SoloDiaryLibrary from './SoloDiaryLibrary';
+import {DB} from '../../utils/db';
+import {getScheduleDateKey} from '../../utils/scheduleTime';
+import {soloDiaryKey} from '../../utils/soloDiary';
 import React,{useEffect,useState} from 'react';
 import './soloDiary.css';
 import {useOS} from '../../context/OSContext';
@@ -15,10 +19,12 @@ export default function SoloDiaryPanel({char}:{char:CharacterProfile}){
  const effective=settings.api||apiConfig;
  const generate=async(date:string,retry=false)=>{setBusy(true);try{await generateSoloDiary(char,userProfile,apiConfig,date,retry);refresh();}catch(e){addToast(e instanceof Error?e.message:'生成失败','error');}finally{setBusy(false);}};
  return <section className="solo-diary-panel" style={{background:'#ffffffb3',border:'1px solid #e9deca',borderRadius:18,padding:16,marginBottom:20,color:'#554735'}}>
-  <button onClick={()=>setOpen(v=>!v)} style={{fontWeight:700,width:'100%',textAlign:'left'}}>TA 的日记 · {char.name}　{open?'⌃':'⌄'}</button>
-  <p style={{fontSize:12,lineHeight:1.7,marginTop:8}}>不需要你先写日记。独立保存，不自动交换或发到聊天。</p>
+  <button onClick={()=>setOpen(v=>!v)} style={{fontWeight:700,width:'100%',textAlign:'left'}}>TA 的日记 · {char.name}　›</button>
+  <p style={{fontSize:12,lineHeight:1.7,marginTop:8}}>日历查看 · 历史搜索 · 独立阅读</p>
+  <p style={{fontSize:12,opacity:.6,marginTop:8}}>{entries.filter(e=>e.status==='done').length} 篇日记 · 点击上方打开日记本</p>
   <button onClick={()=>{setSettings(readSoloDiarySettings());setSettingsOpen(true);}} style={{fontSize:12,textDecoration:'underline',padding:'8px 0'}}>日记 API 与自动写作设置</button>
-  {open&&<div><button disabled={busy} onClick={()=>void generate(diaryDateAt(char,rule.endTime))} style={{padding:'10px 0',fontSize:13}}>{busy?'正在写…':'写最近一个收尾日的日记'}</button>{entries.length===0&&<p style={{fontSize:12}}>还没有独立日记，原有交换日记仍在下方。</p>}{entries.map(entry=><details key={entry.date} style={{borderTop:'1px solid #dfd6c8',padding:'12px 0'}}><summary>{entry.date} · {entry.status==='done'?'已写好':entry.status==='error'?'未完成':'生成中／待确认'}</summary>{entry.text?<article style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',fontSize:14,lineHeight:1.9,paddingTop:12}}>{entry.text}</article>:<div style={{fontSize:12,lineHeight:1.7,paddingTop:10}}>{entry.error||'已发起生成。若关闭页面导致中断，请先检查接口日志，避免重复计费。'}<button disabled={busy} style={{display:'block',paddingTop:8,textDecoration:'underline'}} onClick={()=>{if(window.confirm('这次请求可能已经计费。确认检查日志后重新请求？'))void generate(entry.date,true);}}>确认后手动重试</button></div>}</details>)}</div>}
+  {open&&<SoloDiaryLibrary characterName={char.name} entries={entries} today={getScheduleDateKey(char)} closingDate={diaryDateAt(char,rule.endTime)} busy={busy} onGenerate={generate} onClose={()=>setOpen(false)} onDelete={async date=>{await DB.mutateAsset(soloDiaryKey(char.id),raw=>{const all=JSON.parse(raw||'{}');all[date]={date,status:'deleted',startedAt:all[date]?.startedAt||Date.now()};return JSON.stringify(all);});refresh();}}/>}
+
   <Modal isOpen={settingsOpen} title="日记 · API 与自动写作" onClose={()=>{setSettings(readSoloDiarySettings());setSettingsOpen(false);}}><div className="solo-diary-settings" style={{display:'grid',gap:14,fontSize:13}}>
    <p>仅用于“TA 的日记”，原交换日记的 API 和流程保留。API 配置由所有角色的独立日记共用，日记内容按角色隔离。</p>
    <button onClick={()=>save({...settings,api:null})} style={{textAlign:'left',padding:10,border:'1px solid #ddd',borderRadius:10}}>跟随全局 API {settings.api?'':'✓'}</button>

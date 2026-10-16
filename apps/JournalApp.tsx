@@ -1026,7 +1026,7 @@ ${charPart}
                 </div>
 
                 <div className="sully-journal-calendar-list flex-1 overflow-y-auto p-5 pb-20 no-scrollbar">
-                    <SoloDiaryPanel char={selectedChar} />
+                    <SoloDiaryPanel key={selectedChar.id} char={selectedChar} />
                     <button onClick={() => openEntry(getLocalDateStr())} className="sully-journal-new-entry w-full py-5 mb-8 border-2 border-dashed border-amber-200 rounded-2xl text-amber-500 font-bold flex items-center justify-center gap-2 hover:bg-amber-50 active:scale-95 transition-all">
                         <span className="text-xl">+</span> 写今天的日记
                     </button>

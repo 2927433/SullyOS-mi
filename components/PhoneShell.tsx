@@ -1,5 +1,5 @@
-import SoloDiaryRuntime from './journal/SoloDiaryRuntime';
 import HealthShortcutReceiver from './lifeRecord/HealthShortcutReceiver';
+const SoloDiaryRuntime = React.lazy(() => import('./journal/SoloDiaryRuntime').catch(error => { console.warn('自动日记模块加载失败，下次打开重试', error); return {default: () => null}; }));
 import FirstUseGuide from './FirstUseGuide';
 import FeedbackInvitation from './FeedbackInvitation';
 import BeautyRepoInvitation from './share/BeautyRepoInvitation';
@@ -1106,7 +1106,7 @@ const PhoneShell: React.FC = () => {
        )}
 
        <HealthShortcutReceiver />
-       <SoloDiaryRuntime />
+       {isDataLoaded && !isLocked && <Suspense fallback={null}><SoloDiaryRuntime /></Suspense>}
        {/* 见面 · 剧情首映：解锁后一次性出现 */}
        {!anniversaryHasPriority && !showDisclaimer && !showImportRecoveryPrompt && !showAuthorLetter && showUpdateNotification && (
          <UpdateNotificationController onClose={() => setShowUpdateNotification(false)} />

@@ -1,8 +1,5 @@
 import type {APIConfig, CharacterProfile, UserProfile} from '../types';
 import {DB} from './db';
-import {ContextBuilder} from './context';
-import {loadCharacterContextMessages} from './chatContextRange';
-import {normalizeMessageContent} from './messageFormat';
 import {getScheduleDateKey, getScheduleWallClock} from './scheduleTime';
 import {normalizeApiConfig} from './apiConfigNormalize';
 
@@ -11,7 +8,7 @@ const SETTINGS='solo_diary_settings_v1';
 const announce=()=>{if(typeof window!=='undefined')window.dispatchEvent(new Event(SOLO_DIARY_EVENT));};
 export interface SoloDiaryRule {enabled:boolean;endTime:string;enabledAt:number}
 export interface SoloDiarySettings {api:APIConfig|null;rules:Record<string,SoloDiaryRule>}
-export interface SoloDiaryEntry {date:string;status:'writing'|'done'|'error';text?:string;error?:string;startedAt:number;completedAt?:number}
+export interface SoloDiaryEntry {date:string;status:'writing'|'done'|'error'|'deleted';text?:string;error?:string;startedAt:number;completedAt?:number}
 export function readSoloDiarySettings():SoloDiarySettings {
  try {const s=JSON.parse(localStorage.getItem(SETTINGS)||'{}');return {api:s.api?.baseUrl?normalizeApiConfig(s.api):null,rules:s.rules||{}};}catch{return {api:null,rules:{}};}
 }
@@ -41,6 +38,7 @@ export async function generateSoloDiary(char:CharacterProfile,user:UserProfile,d
  if(!claimed)return;
  announce();
  try {
+  const [{ContextBuilder},{loadCharacterContextMessages},{normalizeMessageContent}]=await Promise.all([import('./context'),import('./chatContextRange'),import('./messageFormat')]);
   const history=(await loadCharacterContextMessages(char)).filter(m=>getScheduleDateKey(char,new Date(m.timestamp))===date);
   const logs=history.map(m=>`${m.role==='user'?user.name:char.name}: ${m.type==='image'?'[图片，未提供画面描述]':normalizeMessageContent(m,char.name,user.name)}`).join('\n').slice(-48000);
   const schedule=await DB.getDailySchedule(char.id,date);

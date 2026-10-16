@@ -27,6 +27,10 @@ describe('independent daily diary',()=>{
  it('does not require a user diary and distinguishes schedule plans from facts',()=>{
   const prompt=soloDiaryPrompt('2026-10-16','当天记录','晚间计划');expect(prompt).toContain('不需要用户先写日记');expect(prompt).toContain('日程是计划');
  });
+ it('does not automatically recreate a deliberately deleted diary',async()=>{
+  await DB.saveAsset(soloDiaryKey(char.id),JSON.stringify({'2026-10-16':{date:'2026-10-16',status:'deleted',startedAt:1}}));
+  const fetcher=vi.spyOn(globalThis,'fetch');await generateSoloDiary(char,user,api,'2026-10-16');expect(fetcher).not.toHaveBeenCalled();
+ });
  it('bundles glass as an optional preset without a quote rule',()=>{
   const glass=BUILTIN_WHITEBOX_PRESETS.find(p=>p.id==='builtin-clear-glass-bilingual')!.read();
   expect(glass.parts.css).toContain('border-left:0');expect(glass.parts.bubbles?.ai.textColor).toBe('#ffffff');
