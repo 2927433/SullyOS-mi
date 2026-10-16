@@ -1,4 +1,5 @@
 import {parseSleepText,parseSleepSamples,type SleepPayload} from './sleepRecords';
+import {readHealthFragment} from './healthFragment';
 export const HEALTH_SHORTCUT_EVENT='sully-health-shortcut';
 export const HEALTH_SHORTCUT_OPEN='sully-health-shortcut-open';
 export const HEALTH_METRICS:Record<string,{label:string;unit:string}>={steps:{label:'步数',unit:'步'},activeEnergyKcal:{label:'活动能量',unit:'kcal'},exerciseMinutes:{label:'锻炼时间',unit:'分钟'},walkingDistanceKm:{label:'步行与跑步距离',unit:'km'},flightsClimbed:{label:'已爬楼层',unit:'层'},restingHeartRate:{label:'静息心率',unit:'次/分钟'},sleepMinutes:{label:'已睡眠',unit:'分钟'},heartRateLatest:{label:'最新采样心率',unit:'次/分钟'},heartRateAverage:{label:'心率样本均值',unit:'次/分钟'},heartRateMin:{label:'最低采样心率',unit:'次/分钟'},heartRateMax:{label:'最高采样心率',unit:'次/分钟'},heartRateSampleCount:{label:'心率样本数',unit:'条'}};
@@ -15,9 +16,9 @@ export function parseHealthShortcut(raw:string):HealthShortcutData{
  return {version:1,date:input.date,metrics,sleep,receivedAt:Date.now()};
 }
 export function captureHealthShortcut():void{
- const params=new URLSearchParams(window.location.hash.slice(1));const raw=params.get('health-import');if(raw===null)return;
+ const hash=window.location.hash;const params=new URLSearchParams(hash.slice(1));if(!params.has('health-import'))return;
  params.delete('health-import');const rest=params.toString();window.history.replaceState(window.history.state,'',window.location.pathname+window.location.search+(rest?'#'+rest:''));
- try{pending={data:parseHealthShortcut(raw)};}catch(e){pending={error:e instanceof Error?e.message:'快捷指令数据无法读取'};}
+ try{pending={data:parseHealthShortcut(readHealthFragment(hash)!)};}catch(e){pending={error:e instanceof Error?e.message:'快捷指令数据无法读取'};}
  window.dispatchEvent(new Event(HEALTH_SHORTCUT_EVENT));
 }
 export function takeHealthShortcut(){const value=pending;pending=null;return value;}

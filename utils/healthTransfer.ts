@@ -1,4 +1,5 @@
 import {parseHealthShortcut,type HealthShortcutData} from './healthShortcut';
+import {readHealthFragment} from './healthFragment';
 /** Accept a direct JSON payload or an existing shortcut URL, without navigating to it. */
 export function parseHealthTransfer(text:string):HealthShortcutData{
  const raw=text.trim();
@@ -7,7 +8,7 @@ export function parseHealthTransfer(text:string):HealthShortcutData{
  if(raw.startsWith('{'))return parseHealthShortcut(raw);
  if(/^https?:\/\//i.test(raw) || raw.startsWith('#health-import=')){
   const hash=raw.startsWith('#')?raw:new URL(raw).hash;
-  const value=new URLSearchParams(hash.slice(1)).get('health-import');
+  const value=readHealthFragment(hash);
   if(value===null)throw new Error('链接中没有 health-import 数据，请改为复制未编码的 JSON');
   return parseHealthShortcut(value);
  }

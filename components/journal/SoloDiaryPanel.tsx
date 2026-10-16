@@ -1,3 +1,4 @@
+import {getSoloDiaryGuide} from '../../utils/soloDiaryGuide';
 import {DIARY_LANGUAGES,diaryTranslationLanguage} from '../../utils/soloDiaryLanguage';
 import {readDiaryRuntimeStatus,SOLO_DIARY_STATUS,SOLO_DIARY_CHECK} from '../../utils/soloDiaryAutomation';
 import SoloDiaryLibrary from './SoloDiaryLibrary';
@@ -8,7 +9,7 @@ import React,{useEffect,useState} from 'react';
 import './soloDiary.css';
 import {useOS} from '../../context/OSContext';
 import type {CharacterProfile} from '../../types';
-import {readSoloDiarySettings,saveSoloDiarySettings,readSoloDiaries,generateSoloDiary,translateSoloDiary,diaryDateAt,SOLO_DIARY_EVENT,type SoloDiaryEntry} from '../../utils/soloDiary';
+import {readSoloDiarySettings,saveSoloDiarySettings,readSoloDiaries,generateSoloDiary,translateSoloDiary,diaryDateAt,SOLO_DIARY_EVENT,type SoloDiaryEntry,type SoloDiaryRule} from '../../utils/soloDiary';
 import Modal from '../os/Modal';
 
 export default function SoloDiaryPanel({char}:{char:CharacterProfile}){
@@ -16,7 +17,7 @@ export default function SoloDiaryPanel({char}:{char:CharacterProfile}){
  const [open,setOpen]=useState(false),[settingsOpen,setSettingsOpen]=useState(false),[settings,setSettings]=useState(readSoloDiarySettings),[entries,setEntries]=useState<SoloDiaryEntry[]>([]),[busy,setBusy]=useState(false),[models,setModels]=useState<string[]>([]),[loadingModels,setLoadingModels]=useState(false);
  const [runtime,setRuntime]=useState(()=>readDiaryRuntimeStatus(char.id));
  useEffect(()=>{const update=()=>setRuntime(readDiaryRuntimeStatus(char.id));window.addEventListener(SOLO_DIARY_STATUS,update);return()=>window.removeEventListener(SOLO_DIARY_STATUS,update);},[char.id]);
- const rule=settings.rules[char.id]||{enabled:false,endTime:'23:00',enabledAt:Date.now()};
+ const rule:SoloDiaryRule=settings.rules[char.id]||{enabled:false,endTime:'23:00',enabledAt:Date.now()};
  const refresh=()=>{void readSoloDiaries(char.id).then(list=>setEntries(Object.values(list).sort((a,b)=>b.date.localeCompare(a.date)))).catch(()=>addToast('角色日记读取失败','error'));};
  useEffect(()=>{refresh();window.addEventListener(SOLO_DIARY_EVENT,refresh);return()=>window.removeEventListener(SOLO_DIARY_EVENT,refresh);},[char.id]);
  const save=(next:typeof settings)=>setSettings(next);
@@ -39,6 +40,7 @@ export default function SoloDiaryPanel({char}:{char:CharacterProfile}){
    <button disabled={loadingModels} onClick={async()=>{setLoadingModels(true);try{const r=await fetch(effective.baseUrl.replace(/\/+$/,'')+'/models',{headers:{Authorization:'Bearer '+effective.apiKey}});if(!r.ok)throw Error();const data=await r.json();setModels((data.data||[]).map((m:any)=>m.id).filter((id:any)=>typeof id==='string'));}catch{addToast('模型列表读取失败，可手动填写模型 ID','error');}finally{setLoadingModels(false);}}}>{loadingModels?'正在读取模型…':'读取可用模型（不生成内容）'}</button>
    {models.length>0&&<select aria-label="日记模型选择" value={effective.model} onChange={e=>save({...settings,api:{...effective,model:e.target.value}})}><option value={effective.model}>{effective.model}</option>{models.filter(m=>m!==effective.model).map(m=><option key={m}>{m}</option>)}</select>}
    <label>译文语言（原文仍跟随角色）<select aria-label="日记译文语言" value={diaryTranslationLanguage(settings.translationLanguage)} onChange={e=>save({...settings,translationLanguage:e.target.value})}>{Object.entries(DIARY_LANGUAGES).map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label><p style={{fontSize:11}}>新日记一次请求同时生成原文和译文，阅读时切换，不会重复调用 API。旧日记可单独补译，原文不会重写。</p>
+   <label>日记写作规范（可编辑）<textarea aria-label="日记写作规范" rows={12} maxLength={20000} value={rule.writingGuide??getSoloDiaryGuide(settings)} onChange={e=>save({...settings,rules:{...settings.rules,[char.id]:{...rule,writingGuide:e.target.value}}})} style={{display:'block',width:'100%',padding:12,border:'1px solid #ddd',borderRadius:12,fontSize:13,lineHeight:1.8,resize:'vertical'}}/></label><button onClick={()=>save({...settings,rules:{...settings.rules,[char.id]:{...rule,writingGuide:undefined}}})}>恢复内置写作规范</button><p style={{fontSize:11}}>规范按当前角色保存，用于以后生成的独立日记；已有文章保留。可调整生活与互动的比重，双语输出格式由程序保留。</p>
    <hr/><label><input type="checkbox" checked={rule.enabled} onChange={e=>save({...settings,rules:{...settings.rules,[char.id]:{...rule,enabled:e.target.checked,enabledAt:e.target.checked?Date.now():rule.enabledAt}}})}/> 为 {char.name} 每天自动写一篇</label>
    <label>一天收尾时间（角色当地时间）<input type="time" value={rule.endTime} onChange={e=>{if(e.target.value)save({...settings,rules:{...settings.rules,[char.id]:{...rule,endTime:e.target.value}}});}} style={{display:'block',padding:8}}/></label>
    <p style={{lineHeight:1.8,color:'#746957'}}>到点在后台安静写作，无需打开日记页面；每天一次，不弹聊天。默认关闭，开启后会调用所选 API，可能计费。网页被 iOS 冻结或关闭时不能准时执行，重新打开后补写最近一个收尾日，不批量补写旧日期。失败不自动重复请求。这里的收尾时间由你设置，不从聊天台词猜测角色是否已睡。</p>
