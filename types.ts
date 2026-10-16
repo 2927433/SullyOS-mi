@@ -3726,6 +3726,11 @@ export interface Task {
 }
 
 export interface Anniversary {
+    category?: 'meeting'|'relationship'|'promise'|'reunion'|'milestone'|'birthday'|'other';
+    note?: string;
+    repeatYearly?: boolean;
+    source?: 'user'|'character';
+    createdAt?: number;
     id: string;
     title: string;
     date: string;
