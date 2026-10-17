@@ -12,12 +12,13 @@ export function canAutoCallFrame({turns,elapsedMs,intervalMinutes,count,changed}
 }
 export function callFrameContext(bubbles:CallFrameBubble[]){return bubbles.filter(b=>b.role==='user'||b.role==='assistant').slice(-6).map(b=>b.role+': '+b.text.slice(0,2000)).join('\n');}
 /** Uses the saved provider and prompt API; no camera, unrelated history or automatic retries. */
-export async function generateCallFrame({char,user,api,bubbles,extra,direct,signal,previous,surface='call'}:{char:CharacterProfile;user:UserProfile;api:APIConfig;bubbles:CallFrameBubble[];extra:string;direct:boolean;signal:AbortSignal;previous?:string;surface?:'call'|'date'}):Promise<NaiGeneratedImage>{
+export async function generateCallFrame({char,user,api,bubbles,extra,direct,signal,previous,presetId,surface='call'}:{char:CharacterProfile;user:UserProfile;api:APIConfig;bubbles:CallFrameBubble[];extra:string;direct:boolean;signal:AbortSignal;previous?:string;presetId?:string;surface?:'call'|'date'}):Promise<NaiGeneratedImage>{
  const check=()=>{if(signal.aborted)throw new DOMException('Cancelled','AbortError');};check();
  const loaded=await loadNaiState();check();
  const profile=loaded.characters[char.id];
  if(!profile?.positive.trim())throw new Error('请先在聊天 + → 生图 → 角色外观，为当前角色填写固定外貌');
- const state={...loaded,characters:{...loaded.characters,[char.id]:{...profile,includeUser:false}},parameters:{...loaded.parameters,n_samples:1}};
+ if(presetId && !loaded.presets.some(p=>p.id===presetId))throw new Error('所选画师组已不存在，请重新选择');
+ const state={...loaded,characters:{...loaded.characters,[char.id]:{...profile,presetId:presetId===undefined?profile.presetId:presetId,includeUser:false}},parameters:{...loaded.parameters,n_samples:1}};
  let scene=extra.trim(),details:NaiSceneDetails={photoType:'selfie',characters:[]};
  if(direct){if(!scene)throw new Error('直接提示词模式需要填写英文画面提示词');}
  else{

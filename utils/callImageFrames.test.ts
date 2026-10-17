@@ -7,6 +7,14 @@ vi.mock('./naiService',()=>({loadNaiState:vi.fn(),generateNaiImages:vi.fn()}));v
 const char={id:'camera-char',name:'A'}as any,user={name:'用户'}as any,api={baseUrl:'https://mock.invalid/v1',apiKey:'mock',model:'text'}as any;
 beforeEach(()=>{vi.clearAllMocks();const state=defaultNaiState();state.connection.apiKey='mock';state.characters[char.id]={...emptyNaiCharacter(),positive:'black hair, blue eyes',includeUser:true};state.characters.__user__={...emptyNaiCharacter(),positive:'USER MUST NOT APPEAR'};vi.mocked(loadNaiState).mockResolvedValue(state);vi.mocked(draftNaiPrompt).mockResolvedValue({scene:'bedroom, upper body',details:{photoType:'selfie',characters:[{id:char.id,positive:'sitting'},{id:'another-char',positive:'OTHER MUST NOT APPEAR'}]}});vi.mocked(generateNaiImages).mockResolvedValue([{token:'blobref:test',blob:new Blob(['mock'])}as any]);});
 afterEach(()=>vi.restoreAllMocks());
+it('applies an artist override without changing the saved profile and allows no artist',async()=>{
+ const saved=await loadNaiState();saved.presets=[{id:'style',name:'Style',category:'',positive:'STYLE_MARKER',negative:''}];
+ await generateCallFrame({char,user,api,bubbles:[],extra:'solo',direct:true,presetId:'style',signal:new AbortController().signal});
+ expect(JSON.stringify(vi.mocked(generateNaiImages).mock.calls[0][1])).toContain('STYLE_MARKER');expect(saved.characters[char.id].presetId).toBe('');
+ saved.characters[char.id].presetId='style';
+ await generateCallFrame({char,user,api,bubbles:[],extra:'solo',direct:true,presetId:'',signal:new AbortController().signal});
+ expect(JSON.stringify(vi.mocked(generateNaiImages).mock.calls[1][1])).not.toContain('STYLE_MARKER');expect(saved.characters[char.id].presetId).toBe('style');expect(draftNaiPrompt).not.toHaveBeenCalled();
+});
 describe('video call generation',()=>{
  it('requires all low-frequency gates and never runs on an idle timer',()=>{const base={turns:3,elapsedMs:300000,intervalMinutes:5,count:0,changed:true};expect(canAutoCallFrame(base)).toBe(true);for(const change of [{turns:2},{elapsedMs:299999},{changed:false},{count:5}])expect(canAutoCallFrame({...base,...change})).toBe(false);});
  it('conservatively detects visual changes rather than future plans or routine chat',()=>{expect(hasCallVisualChange('我换上了深色衬衫。')).toBe(true);expect(hasCallVisualChange('I changed into a dark shirt.')).toBe(true);expect(hasCallVisualChange('明天我换上另一件衣服。')).toBe(false);expect(hasCallVisualChange('Tomorrow I changed into a coat.')).toBe(false);expect(hasCallVisualChange('今天心情不错，想你了。')).toBe(false);});
