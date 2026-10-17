@@ -12,7 +12,7 @@ export function canAutoCallFrame({turns,elapsedMs,intervalMinutes,count,changed}
 }
 export function callFrameContext(bubbles:CallFrameBubble[]){return bubbles.filter(b=>b.role==='user'||b.role==='assistant').slice(-6).map(b=>b.role+': '+b.text.slice(0,2000)).join('\n');}
 /** Uses the saved provider and prompt API; no camera, unrelated history or automatic retries. */
-export async function generateCallFrame({char,user,api,bubbles,extra,direct,signal,previous}:{char:CharacterProfile;user:UserProfile;api:APIConfig;bubbles:CallFrameBubble[];extra:string;direct:boolean;signal:AbortSignal;previous?:string}):Promise<NaiGeneratedImage>{
+export async function generateCallFrame({char,user,api,bubbles,extra,direct,signal,previous,surface='call'}:{char:CharacterProfile;user:UserProfile;api:APIConfig;bubbles:CallFrameBubble[];extra:string;direct:boolean;signal:AbortSignal;previous?:string;surface?:'call'|'date'}):Promise<NaiGeneratedImage>{
  const check=()=>{if(signal.aborted)throw new DOMException('Cancelled','AbortError');};check();
  const loaded=await loadNaiState();check();
  const profile=loaded.characters[char.id];
@@ -21,8 +21,8 @@ export async function generateCallFrame({char,user,api,bubbles,extra,direct,sign
  let scene=extra.trim(),details:NaiSceneDetails={photoType:'selfie',characters:[]};
  if(direct){if(!scene)throw new Error('直接提示词模式需要填写英文画面提示词');}
  else{
-  const compiled=await draftNaiPrompt('上一张镜头的画面线索（只用于保持未改变内容，不代表新事件）：\n'+(previous?.slice(0,4000)||'暂无')+'\n本次视频通话文字（最新明确变化优先）：\n'+callFrameContext(bubbles),resolveNaiPromptApi(state,api),char,user,
-   [state.sceneGuide,extra,'视频通话的角色单人镜头：只画当前角色，胸像或半身，镜头另一侧的用户不入画。photoType 必须为 selfie；固定外貌由程序追加。依据最近明确的角色地点、衣着、动作，保留没有变化的线索；用户的所在地不是角色所在地。不把比喻、假设、未来计划或用户自己的动作画成角色现实。没有明确场景则使用中性背景，不编造重大情节。只描述最终可见画面，不画界面、字幕或聊天气泡。'].filter(Boolean).join('\n'),signal,getNaiSceneGuide(state));
+  const compiled=await draftNaiPrompt('上一张镜头的画面线索（只用于保持未改变内容，不代表新事件）：\n'+(previous?.slice(0,4000)||'暂无')+'\n本次'+(surface==='date'?'线下见面':'视频通话')+'文字（最新明确变化优先）：\n'+callFrameContext(bubbles),resolveNaiPromptApi(state,api),char,user,
+   [state.sceneGuide,extra,(surface==='date'?'线下见面立绘替代画面：以用户第一视角看到的当前角色和周围场景构图，适合竖屏单人半身／全身立绘场景。不是视频通话，不画手机、摄像头或屏幕边框；用户本体不入画，不擅自画合照或凭空添加身体接触。严格遵循当前剧情地点和日期，不用现实设备的时间推演剧情。':'视频通话的角色单人镜头：只画当前角色，胸像或半身，镜头另一侧的用户不入画。')+'photoType 必须为 selfie（本程序的单角色载入类别，不表示必须拿手机自拍）；固定外貌由程序追加。依据最近明确的角色地点、衣着、动作，保留没有变化的线索；用户的所在地不是角色所在地。不把比喻、假设、未来计划或用户自己的动作画成角色现实。没有明确场景则使用中性背景，不编造重大情节。只描述最终可见画面，不画界面、字幕或聊天气泡。'].filter(Boolean).join('\n'),signal,getNaiSceneGuide(state));
   check();scene=compiled.scene;details={...compiled.details,photoType:'selfie',characters:(compiled.details.characters||[]).filter(c=>c.id===char.id)};
  }
  const request=buildNaiRequest(state,char.id,scene,'',undefined,details);check();

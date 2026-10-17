@@ -1106,7 +1106,7 @@ const DateApp: React.FC = () => {
     if (mode === 'session') {
         return (
             <>
-                <DateSession
+                <DateSession key={char.id+':'+encounterIdRef.current}
                     char={char}
                     userProfile={userProfile}
                     messages={dateMessages}
