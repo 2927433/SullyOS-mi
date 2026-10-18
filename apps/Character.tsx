@@ -36,8 +36,8 @@ import { injectMemoryPalace } from '../utils/memoryPalace/pipeline';
 import { COMMON_TIMEZONES } from '../utils/timezone';
 import { toMountedWorldbook } from '../utils/worldbook';
 import { stripSensitiveCardFields } from '../utils/characterCard';
+import { readCharacterImport } from '../utils/stCharacterCard';
 import { shareOrDownloadFile } from '../utils/shareExport';
-import { readShareText } from '../utils/pngShare';
 import { confirmExportSafety } from '../utils/exportGuard';
 import { trackEvent } from '../utils/analytics';
 import { sortCharacterGroups, GROUP_FILTER_UNGROUPED } from '../components/character/CharacterGroupFilter';
@@ -1148,8 +1148,7 @@ ${isInitialGeneration ? `
       if (!file) return;
 
       try {
-          const json = await readShareText(file, 'character');
-          const data: CharacterExportData = JSON.parse(json);
+          const data: CharacterExportData = await readCharacterImport(file);
 
           if (data.type !== 'sully_character_card') {
               throw new Error('无效的角色卡文件');
