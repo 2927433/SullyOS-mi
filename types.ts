@@ -2716,6 +2716,8 @@ export interface MemoryPalaceWaterlineConfig {
 }
 
 export interface CharacterProfile {
+  /** Legacy importer field, removed by startup migration. New imports omit all greetings. */
+  stGreetingReference?: string[];
   /** Opt-in fourth-wall creative effect, isolated per character. */
   chatMeta?: {enabled:boolean;probability:number};
   /** Local default for this character's dialogue; absent means follow Settings. Never shared in cards. */
@@ -3715,6 +3717,9 @@ export interface HandbookEntry {
 }
 
 export interface Task {
+    supervisorIds?: string[];
+    kind?: 'wish' | 'plan' | 'personal';
+    plannedTime?: string;
     id: string;
     title: string;
     supervisorId: string;

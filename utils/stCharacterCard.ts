@@ -3,14 +3,13 @@ import {isPng,pngHasShare,readShareText} from './pngShare';
 import {parseStandardWorldbook,toMountedWorldbook} from './worldbook';
 
 const text=(v:unknown)=>typeof v==='string'?v:'';
-const strings=(v:unknown)=>Array.isArray(v)?v.filter((s):s is string=>typeof s==='string'):[];
 /** Only map character text and lore. Never import extensions, scripts, regex or credentials. */
 export function convertStCard(raw:any,avatar=''):CharacterExportData {
  if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error('无效的角色卡文件');
  if(raw.spec && !['chara_card_v2','chara_card_v3'].includes(raw.spec))throw new Error('暂不支持此角色卡版本');
  const d=raw.spec?raw.data:raw;
  if(!d||typeof d.name!=='string'||!d.name.trim()||(!raw.spec&&!['description','personality','first_mes','scenario','mes_example'].some(k=>typeof d[k]==='string')))throw new Error('不是受支持的 ST 角色卡');
- const sections=[['角色设定',d.description],['性格',d.personality],['初始场景（背景设定，不代表已经发生）',d.scenario],['角色补充指令',d.system_prompt],['示例对话（仅供风格参考，不是聊天记录）',d.mes_example],['原卡开场白（仅供参考，不是已发生的对话）',d.first_mes],['备选开场白（仅供参考）',strings(d.alternate_greetings).join('\n\n')],['原卡后置补充要求',d.post_history_instructions]];
+ const sections=[['角色设定',d.description],['性格',d.personality],['初始场景（背景设定，不代表已经发生）',d.scenario],['角色补充指令',d.system_prompt],['示例对话（仅供风格参考，不是聊天记录）',d.mes_example],['原卡后置补充要求',d.post_history_instructions]];
  const book=d.character_book;
  const entries:any[]=Array.isArray(book?.entries)?book.entries:[];
  const category=`${d.name.trim()} · ${text(book?.name).trim()||'角色世界书'}`;

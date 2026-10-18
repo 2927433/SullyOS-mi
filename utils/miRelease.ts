@@ -1,10 +1,10 @@
 import {BUILD_LABEL,BUILD_TIME_LABEL} from './buildInfo';
-export const MI_RELEASE_ID='km1.0-st1';
+export const MI_RELEASE_ID='km1.0-agenda3';
 // A new deployment can share the product version, so receipt follows the actual build.
 export const MI_RELEASE_NOTICE_KEY='mi_release_seen_'+BUILD_LABEL+'_'+BUILD_TIME_LABEL;
-export const MI_RELEASE_TITLE='km1.0 · ST 角色卡导入';
+export const MI_RELEASE_TITLE='km1.0 · 岁时笺独立同步';
 export const MI_RELEASE_ITEMS=[
- ['ST 角色卡','神经链接原导入按钮支持 ST 的原始 PNG 卡和 V1／V2／V3 JSON。'],
- ['世界书同步','内嵌世界书按角色名与书名分组，并挂载到新角色；不会覆盖已有条目。'],
- ['导入边界','截图不能还原人设；ST 专用脚本、正则与界面扩展不运行。版本保持 km1.0。'],
+ ['开场白修复','ST 开场白不导入、不另存；旧版导入器添加的开场白分区会清理。'],
+ ['多个监督人','一项任务可选多位角色，各自读取任务、独立评价，不提供其他监督人名单。'],
+ ['岁时笺','统一记一份安排，所有角色在聊天中独立感知、自然关心；仅作为上下文资料，不启动主动消息或定时提醒。版本 km1.0。'],
 ] as const;

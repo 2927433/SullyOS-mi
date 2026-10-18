@@ -1,4 +1,5 @@
 import { CharacterProfile, UserImpression } from '../types';
+import {separateStGreetings} from './stGreetingMigration';
 
 const toStringValue = (value: unknown, fallback = ''): string =>
     typeof value === 'string' ? value : fallback;
@@ -105,6 +106,7 @@ export const normalizeCharacterImpression = (char: CharacterProfile): CharacterP
  * memoryPalaceEnabled 是用户显式 opt-in 的功能，不在这里替用户开。
  */
 export const normalizeCharacterDefaults = (char: CharacterProfile): CharacterProfile => {
+    char = separateStGreetings(char);
     if (char.emotionConfig !== undefined) return char;
     return { ...char, emotionConfig: { enabled: true } };
 };

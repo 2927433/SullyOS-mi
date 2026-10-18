@@ -1,3 +1,7 @@
+import PersonalAgenda from '../components/schedule/PersonalAgenda';
+import {taskSupervisorIds,taskKind} from '../utils/sharedTasks';
+import AnniversarySpace from '../components/schedule/AnniversarySpace';
+import {ANNIVERSARY_CHANGED,anniversaryOccurrence} from '../utils/sharedAnniversaries';
 
 
 
@@ -82,7 +86,8 @@ const ScheduleApp: React.FC = () => {
     const localDateKey = useLocalDateKey();
     const [tasks, setTasks] = useState<Task[]>([]);
     const [anniversaries, setAnniversaries] = useState<Anniversary[]>([]);
-    const [activeTab, setActiveTab] = useState<'quest' | 'server_events'>('quest');
+    const [anniSelectedId,setAnniSelectedId]=useState(activeCharacterId||characters[0]?.id||'');
+    const [activeTab, setActiveTab] = useState<'quest' | 'server_events' | 'personal'>('quest');
     useAppShortcut(ShortcutAppID.Schedule, intent => setActiveTab(intent.entryId === 'server_events' ? 'server_events' : 'quest'));
     
     // Processing State for feedback
@@ -94,25 +99,29 @@ const ScheduleApp: React.FC = () => {
 
     // Add Modal States
     const [showTaskModal, setShowTaskModal] = useState(false);
+    const [editingTask,setEditingTask]=useState<Task|null>(null);
     const [showAnniModal, setShowAnniModal] = useState(false);
 
     // Forms
     const [newTaskTitle, setNewTaskTitle] = useState('');
-    const [newTaskSupervisor, setNewTaskSupervisor] = useState<string>(activeCharacterId || '');
+    const [newTaskSupervisors,setNewTaskSupervisors]=useState<string[]>(activeCharacterId?[activeCharacterId]:[]);
+    const taskSection='wish' as const;
+    const [showAgendaModal,setShowAgendaModal]=useState(false);
+    const [newTaskDate,setNewTaskDate]=useState(''),[newTaskTime,setNewTaskTime]=useState('');
+    const visibleTasks=tasks.filter(t=>taskKind(t)!=='personal');
     const [supervisorGroupId, setSupervisorGroupId] = useState<string>(GROUP_FILTER_ALL); // 选监督人的分组筛选
-
-    const [newAnniTitle, setNewAnniTitle] = useState('');
-    const [newAnniDate, setNewAnniDate] = useState('');
-    const [newAnniChar, setNewAnniChar] = useState<string>(activeCharacterId || '');
-    const [anniCharGroupId, setAnniCharGroupId] = useState<string>(GROUP_FILTER_ALL); // 纪念日关联对象的分组筛选
 
     useEffect(() => {
         loadData();
+        const reload=()=>{void loadData();};
+        window.addEventListener(ANNIVERSARY_CHANGED,reload);
+        window.addEventListener('focus',reload);
         // Load theme from local storage if needed, defaulting to cyber
         const saved = localStorage.getItem('schedule_app_theme');
         if (saved && THEMES[saved as ThemeMode]) {
             setCurrentThemeMode(saved as ThemeMode);
         }
+        return()=>{window.removeEventListener(ANNIVERSARY_CHANGED,reload);window.removeEventListener('focus',reload);};
     }, []);
 
     const toggleTheme = () => {
@@ -132,9 +141,9 @@ const ScheduleApp: React.FC = () => {
 
     // --- AI Logic ---
 
-    const generateTaskReward = async (task: Task) => {
+    const generateTaskReward = async (task: Task, supervisorId: string) => {
 
-        const supervisor = characters.find(c => c.id === task.supervisorId);
+        const supervisor = characters.find(c => c.id === supervisorId);
         if (!supervisor || !apiConfig.apiKey) {
             addToast('任务已完成', 'success');
             return;
@@ -154,7 +163,7 @@ const ScheduleApp: React.FC = () => {
             const userPrompt = `
 ### 场景：任务完成 (Task Completed)
 用户 (${userProfile.name}) 刚刚在现实生活中完成了一个任务/契约： "${task.title}"。
-你是监督人。
+你是监督人。仅以你自己的身份独立回应，不提其他监督者，不虚构共同监督。
 
 ### 任务
 请根据你的人设，对用户完成任务这一行为做出反应。
@@ -235,7 +244,7 @@ const ScheduleApp: React.FC = () => {
              addToast(`${char.name} 正在查阅日历...`, 'info');
         }
 
-        const daysDiff = getCalendarDayDifference(getLocalDateKey(), anni.date) ?? 0;
+        const daysDiff = getCalendarDayDifference(getLocalDateKey(), anniversaryOccurrence(anni,getLocalDateKey())) ?? 0;
         const dayText = daysDiff > 0 ? `还有 ${daysDiff} 天` : (daysDiff === 0 ? '就是今天!' : `已经过去 ${Math.abs(daysDiff)} 天了`);
 
         // RESTORED: Full context
@@ -280,9 +289,8 @@ const ScheduleApp: React.FC = () => {
             const text = data.choices?.[0]?.message?.content?.trim().replace(/^["']|["']$/g, '');
             
             if (text) {
-                const updatedAnni = { ...anni, aiThought: text, lastThoughtGeneratedAt: Date.now() };
-                await DB.saveAnniversary(updatedAnni);
-                setAnniversaries(prev => prev.map(a => a.id === anni.id ? updatedAnni : a));
+                const updatedAnni=await DB.saveAnniversaryThought(anni,text);
+                if(updatedAnni)setAnniversaries(prev=>prev.map(a=>a.id===anni.id?{...a,aiThought:updatedAnni.aiThought,lastThoughtGeneratedAt:updatedAnni.lastThoughtGeneratedAt}:a));
             } else {
                 console.warn("AI returned empty thought", data);
             }
@@ -296,18 +304,23 @@ const ScheduleApp: React.FC = () => {
 
     const handleAddTask = async () => {
         if (!newTaskTitle.trim()) return;
+        const selected=[...new Set(newTaskSupervisors)].filter(id=>characters.some(c=>c.id===id));
+        if(!selected.length){addToast('请至少选择一位监督人','info');return;}
+        if(newTaskTime&&!newTaskDate){addToast('设置时间前请先选择日期','info');return;}
         const task: Task = {
-            id: `task-${Date.now()}`,
+            ...editingTask,
+            id: editingTask?.id || `task-${crypto.randomUUID()}`,
             title: newTaskTitle,
-            supervisorId: newTaskSupervisor || characters[0]?.id,
+            supervisorId: selected[0],supervisorIds:selected,kind:taskSection,deadline:newTaskDate||undefined,plannedTime:newTaskTime||undefined,
             tone: 'gentle', // Deprecated but kept for type compatibility
-            isCompleted: false,
-            createdAt: Date.now()
+            isCompleted: editingTask?.isCompleted || false,
+            completedAt: editingTask?.completedAt,
+            createdAt: editingTask?.createdAt || Date.now()
         };
         await DB.saveTask(task);
-        setTasks(prev => [task, ...prev]);
+        setTasks(prev => editingTask?prev.map(t=>t.id===task.id?task:t):[task,...prev]);
         setShowTaskModal(false);
-        setNewTaskTitle('');
+        setNewTaskTitle('');setNewTaskDate('');setNewTaskTime('');setEditingTask(null);
     };
 
     const handleToggleTask = async (task: Task) => {
@@ -319,7 +332,7 @@ const ScheduleApp: React.FC = () => {
             // Start Visual Loading State on the Item
             setProcessingTaskIds(prev => new Set(prev).add(task.id));
             try {
-                await generateTaskReward(updated);
+                for(const supervisorId of taskSupervisorIds(updated)){await generateTaskReward(updated,supervisorId);}
             } finally {
                 // End Visual Loading State
                 setProcessingTaskIds(prev => {
@@ -336,28 +349,6 @@ const ScheduleApp: React.FC = () => {
         setTasks(prev => prev.filter(t => t.id !== id));
     };
 
-    const handleAddAnni = async () => {
-        if (!newAnniTitle.trim() || !newAnniDate) return;
-        const anni: Anniversary = {
-            id: `anni-${Date.now()}`,
-            title: newAnniTitle,
-            date: newAnniDate,
-            charId: newAnniChar || characters[0]?.id
-        };
-        await DB.saveAnniversary(anni);
-        setAnniversaries(prev => [...prev, anni].sort((a, b) => a.date.localeCompare(b.date)));
-        setShowAnniModal(false);
-        setNewAnniTitle('');
-        setNewAnniDate('');
-        
-        // Remove immediate trigger to avoid double calls (useEffect will handle if it's upcoming)
-    };
-
-    const handleDeleteAnni = async (id: string) => {
-        await DB.deleteAnniversary(id);
-        setAnniversaries(prev => prev.filter(a => a.id !== id));
-    };
-
     // --- Render Helpers ---
 
     const getDaysUntil = (dateStr: string) => {
@@ -365,8 +356,8 @@ const ScheduleApp: React.FC = () => {
     };
 
     const upcomingAnni = useMemo(() => {
-        return anniversaries.filter(a => getDaysUntil(a.date) >= 0).sort((a, b) => a.date.localeCompare(b.date))[0];
-    }, [anniversaries, localDateKey]);
+        return anniversaries.filter(a=>a.charId===anniSelectedId&&getDaysUntil(anniversaryOccurrence(a,localDateKey))>=0).sort((a,b)=>anniversaryOccurrence(a,localDateKey).localeCompare(anniversaryOccurrence(b,localDateKey)))[0];
+    }, [anniversaries, localDateKey,anniSelectedId]);
 
     // Trigger thoughts for upcoming anniversary on load
     useEffect(() => {
@@ -407,8 +398,9 @@ const ScheduleApp: React.FC = () => {
 
                 {/* Tabs */}
                 <div className={`flex gap-1 p-1 rounded-lg ${currentThemeMode === 'cyber' ? 'bg-black/40 border border-cyan-900/50' : (currentThemeMode === 'minimal' ? 'bg-[#eef2f6] shadow-[inset_2px_2px_5px_#d1d9e6,inset_-2px_-2px_5px_#ffffff]' : 'bg-white/50')}`}>
-                    <button onClick={() => { setActiveTab('quest'); trackEvent('切换日程标签页', { tab: 'quest' }); }} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${activeTab === 'quest' ? `${theme.accent} ${currentThemeMode === 'cyber' ? 'bg-cyan-900/50 shadow-sm' : (currentThemeMode === 'minimal' ? 'shadow-[2px_2px_5px_#d1d9e6,-2px_-2px_5px_#ffffff] bg-[#eef2f6]' : 'bg-white shadow-sm')}` : `${theme.textSub}`}`}>{theme.label}</button>
-                    <button onClick={() => { setActiveTab('server_events'); trackEvent('切换日程标签页', { tab: 'server_events' }); }} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${activeTab === 'server_events' ? `${theme.accent} ${currentThemeMode === 'cyber' ? 'bg-cyan-900/50 shadow-sm' : (currentThemeMode === 'minimal' ? 'shadow-[2px_2px_5px_#d1d9e6,-2px_-2px_5px_#ffffff] bg-[#eef2f6]' : 'bg-white shadow-sm')}` : `${theme.textSub}`}`}>{theme.eventLabel}</button>
+                    <button onClick={() => { setActiveTab('quest'); trackEvent('切换日程标签页', { tab: 'quest' }); }} className={`px-2 py-1.5 rounded text-xs font-bold transition-all ${activeTab === 'quest' ? `${theme.accent} ${currentThemeMode === 'cyber' ? 'bg-cyan-900/50 shadow-sm' : (currentThemeMode === 'minimal' ? 'shadow-[2px_2px_5px_#d1d9e6,-2px_-2px_5px_#ffffff] bg-[#eef2f6]' : 'bg-white shadow-sm')}` : `${theme.textSub}`}`}>心愿单</button>
+                    <button onClick={() => { setActiveTab('server_events'); trackEvent('切换日程标签页', { tab: 'server_events' }); }} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${activeTab === 'server_events' ? `${theme.accent} ${currentThemeMode === 'cyber' ? 'bg-cyan-900/50 shadow-sm' : (currentThemeMode === 'minimal' ? 'shadow-[2px_2px_5px_#d1d9e6,-2px_-2px_5px_#ffffff] bg-[#eef2f6]' : 'bg-white shadow-sm')}` : `${theme.textSub}`}`}>纪念日</button>
+                    <button onClick={()=>setActiveTab('personal')} className={`px-2 py-1.5 rounded text-xs font-bold whitespace-nowrap ${activeTab==='personal'?theme.accent:theme.textSub}`}>岁时笺</button>
                 </div>
 
                 {/* Right Actions */}
@@ -421,7 +413,7 @@ const ScheduleApp: React.FC = () => {
                     </button>
 
                     {/* Add Button */}
-                    <button onClick={() => { activeTab === 'quest' ? setShowTaskModal(true) : setShowAnniModal(true); trackEvent('打开新建条目弹窗', { kind: activeTab }); }} className={`p-2 rounded-full active:scale-90 transition-transform ${theme.accent} ${currentThemeMode === 'minimal' ? 'shadow-[4px_4px_8px_#d1d9e6,-4px_-4px_8px_#ffffff]' : 'hover:bg-white/10'}`}>
+                    <button aria-label={activeTab==='quest'?'新建任务':activeTab==='personal'?'新建个人日程':'添加纪念日'} onClick={() => { activeTab === 'personal' ? setShowAgendaModal(true) : activeTab === 'quest' ? (setEditingTask(null),setNewTaskTitle(''),setNewTaskDate(''),setNewTaskTime(''),setShowTaskModal(true)) : setShowAnniModal(true); trackEvent('打开新建条目弹窗', { kind: activeTab }); }} className={`p-2 rounded-full active:scale-90 transition-transform ${theme.accent} ${currentThemeMode === 'minimal' ? 'shadow-[4px_4px_8px_#d1d9e6,-4px_-4px_8px_#ffffff]' : 'hover:bg-white/10'}`}>
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
                     </button>
                 </div>
@@ -434,12 +426,12 @@ const ScheduleApp: React.FC = () => {
             <div className="flex-1 overflow-y-auto no-scrollbar p-6 space-y-8 z-10">
                 
                 {/* Hero Anniversary Card */}
-                {upcomingAnni && (
+                {upcomingAnni && activeTab==='quest' && (
                     <div className={`w-full rounded-2xl p-5 relative overflow-hidden group transition-all duration-300 ${currentThemeMode === 'minimal' ? 'bg-[#eef2f6] shadow-[inset_5px_5px_10px_#d1d9e6,inset_-5px_-5px_10px_#ffffff]' : (currentThemeMode === 'soft' ? 'bg-gradient-to-r from-pink-300 to-purple-300 text-white shadow-lg shadow-pink-200' : 'bg-gradient-to-r from-slate-900 to-slate-800 border border-purple-500/30')}`}>
                         <div className="relative z-10">
                             <div className="flex justify-between items-start mb-2">
                                 <div className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded ${currentThemeMode === 'minimal' ? 'text-slate-400' : 'text-white/80 bg-white/20'}`}>即将到来</div>
-                                <div className="text-3xl font-bold tracking-tighter">{getDaysUntil(upcomingAnni.date)} <span className="text-xs opacity-60 font-normal">天后</span></div>
+                                <div className="text-3xl font-bold tracking-tighter">{getDaysUntil(anniversaryOccurrence(upcomingAnni,localDateKey))} <span className="text-xs opacity-60 font-normal">天后</span></div>
                             </div>
                             <div className="text-xl font-bold mb-4">{upcomingAnni.title}</div>
                             
@@ -455,20 +447,21 @@ const ScheduleApp: React.FC = () => {
                 )}
 
                 {activeTab === 'quest' && (
-                    <div className="space-y-4">
+                    <div className="space-y-4"><p className="text-xs opacity-60">心愿可选多位角色各自监督，共用一次完成状态。你自己的日期安排请写在“岁时笺”。</p>
                         <div className="flex items-center gap-2 mb-2 px-1">
                             <div className={`w-2 h-2 rounded-full animate-pulse ${currentThemeMode === 'cyber' ? 'bg-cyan-500' : (currentThemeMode === 'soft' ? 'bg-pink-400' : 'bg-slate-400')}`}></div>
                             <h3 className={`text-xs font-bold uppercase tracking-[0.2em] ${theme.accent}`}>进行中任务</h3>
                         </div>
                         
-                        {tasks.filter(t => !t.isCompleted).length === 0 && (
+                        {visibleTasks.filter(t => !t.isCompleted).length === 0 && (
                             <div className={`text-center py-12 border-2 border-dashed rounded-xl ${currentThemeMode === 'cyber' ? 'border-slate-800' : 'border-slate-200'}`}>
                                 <div className={theme.textSub}>暂无任务</div>
                             </div>
                         )}
 
-                        {tasks.filter(t => !t.isCompleted).map(task => {
-                            const supervisor = characters.find(c => c.id === task.supervisorId);
+                        {visibleTasks.filter(t => !t.isCompleted).map(task => {
+                            const supervisors=characters.filter(c=>taskSupervisorIds(task).includes(c.id));
+                            const supervisor=supervisors[0];
                             const isProcessing = processingTaskIds.has(task.id);
                             
                             return (
@@ -479,11 +472,12 @@ const ScheduleApp: React.FC = () => {
                                         <div className={`absolute -bottom-0 -right-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${currentThemeMode === 'soft' ? 'bg-white text-pink-500' : 'bg-black text-cyan-500'}`}>!</div>
                                     </div>
                                     
-                                    <div className="flex-1">
-                                        <div className={`${theme.text} font-bold text-sm tracking-wide`}>{task.title}</div>
+                                    <div className="flex-1 min-w-0 break-words">
+                                        <div className={`${theme.text} font-bold text-sm tracking-wide`}>{task.title}</div><div className="text-xs opacity-60">{task.deadline}{task.plannedTime?` ${task.plannedTime}`:''}</div>
                                         <div className={`text-[10px] ${theme.textSub} mt-1 font-mono uppercase`}>
-                                            监督人: {supervisor?.name || 'Unknown'}
+                                            独立监督: {supervisors.map(c=>c.name).join('、') || '未设置'}
                                         </div>
+                                        <button className="text-xs underline mt-2" onClick={()=>{setEditingTask(task);setNewTaskTitle(task.title);setNewTaskSupervisors(taskSupervisorIds(task));setNewTaskDate(task.deadline||'');setNewTaskTime(task.plannedTime||'');setShowTaskModal(true);}}>编辑安排</button>
                                     </div>
 
                                     {/* Action Button Area */}
@@ -501,15 +495,15 @@ const ScheduleApp: React.FC = () => {
                                         </button>
                                     )}
                                     
-                                    <button onClick={() => handleDeleteTask(task.id)} className="absolute top-2 right-2 text-slate-400 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-1">×</button>
+                                    <button onClick={() => handleDeleteTask(task.id)} className="absolute top-2 right-2 text-slate-400 hover:text-red-400 opacity-70 group-hover:opacity-100 transition-opacity p-1">×</button>
                                 </div>
                             );
                         })}
 
-                        {tasks.filter(t => t.isCompleted).length > 0 && (
+                        {visibleTasks.filter(t => t.isCompleted).length > 0 && (
                             <div className="pt-8 opacity-50">
                                 <h3 className={`text-xs font-bold uppercase tracking-[0.2em] px-1 mb-4 ${theme.textSub}`}>已完成</h3>
-                                {tasks.filter(t => t.isCompleted).map(task => (
+                                {visibleTasks.filter(t => t.isCompleted).map(task => (
                                     <div key={task.id} className={`flex items-center gap-3 py-2 px-2 border-b ${currentThemeMode === 'cyber' ? 'border-slate-800/50' : 'border-slate-100'}`}>
                                         <div className={`${theme.iconDone} text-xs font-mono`}>[DONE]</div>
                                         <span className={`text-sm line-through ${theme.textSub}`}>{task.title}</span>
@@ -521,42 +515,11 @@ const ScheduleApp: React.FC = () => {
                     </div>
                 )}
 
-                {activeTab === 'server_events' && (
-                    <div className={`relative pl-6 space-y-8 before:absolute before:left-2 before:top-2 before:bottom-0 before:w-[1px] ${theme.decoLine}`}>
-                        {/* Anniversaries List */}
-                        <div>
-                             <h3 className={`text-xs font-bold uppercase tracking-widest mb-6 -ml-6 pl-6 ${theme.textSub}`}>时间线事件</h3>
-                             <div className="space-y-4">
-                                 {anniversaries.map(a => (
-                                     <div key={a.id} className="relative group">
-                                         <div className={`absolute -left-[20px] top-4 w-2 h-2 rounded-full z-10 ${currentThemeMode === 'cyber' ? 'bg-black border border-purple-500' : 'bg-pink-400'}`}></div>
-                                         <div className={`${theme.card} p-4 flex justify-between items-center transition-colors`}>
-                                             <div>
-                                                 <div className={`text-sm font-bold ${theme.text}`}>{a.title}</div>
-                                                 <div className={`text-[10px] ${theme.textSub} font-mono mt-1`}>{a.date} · {characters.find(c => c.id === a.charId)?.name}</div>
-                                             </div>
-                                             <button onClick={() => handleDeleteAnni(a.id)} className="text-slate-400 hover:text-red-400 p-2 opacity-0 group-hover:opacity-100 transition-opacity">×</button>
-                                         </div>
-                                     </div>
-                                 ))}
-                             </div>
-                        </div>
-
-                        {/* Completed Tasks History Log */}
-                         <div>
-                             <h3 className={`text-xs font-bold uppercase tracking-widest mb-6 -ml-6 pl-6 pt-4 ${theme.textSub}`}>完成履历</h3>
-                             <div className="space-y-4">
-                                 {tasks.filter(t => t.isCompleted).sort((a,b) => (b.completedAt || 0) - (a.completedAt || 0)).map(t => (
-                                     <div key={t.id} className="relative">
-                                         <div className={`absolute -left-[20px] top-2 w-2 h-2 rounded-full z-10 ${currentThemeMode === 'cyber' ? 'bg-black border border-green-600' : 'bg-slate-300'}`}></div>
-                                         <div className={`text-xs ${theme.textSub} font-mono`}>[{new Date(t.completedAt || 0).toLocaleDateString()}] 任务完成</div>
-                                         <div className={`text-sm ${theme.text} font-bold mt-1 pl-1 border-l-2 ${theme.decoLine}`}>{t.title}</div>
-                                     </div>
-                                 ))}
-                             </div>
-                         </div>
-                    </div>
-                )}
+                {activeTab === 'personal' && <PersonalAgenda tasks={tasks} adding={showAgendaModal} onClose={()=>setShowAgendaModal(false)} onChanged={()=>void loadData()} onError={message=>addToast(message,'error')}/>}
+                {activeTab === 'server_events' && <>
+                    <AnniversarySpace characters={characters} entries={anniversaries} selectedId={anniSelectedId} onSelect={setAnniSelectedId} today={localDateKey} adding={showAnniModal} onCloseAdd={()=>setShowAnniModal(false)} onChanged={()=>void loadData()} onError={message=>addToast(message,'error')}/>
+                    <details className="mt-6"><summary className="text-xs opacity-60 py-3">TA 监督的已完成契约</summary><div className="space-y-3 pt-3">{tasks.filter(t=>t.isCompleted&&taskSupervisorIds(t).includes(anniSelectedId)).map(t=><div key={t.id} className="text-sm">{t.title}</div>)}</div></details>
+                </>}
 
             </div>
 
@@ -566,13 +529,13 @@ const ScheduleApp: React.FC = () => {
                     <input autoFocus value={newTaskTitle} onChange={e => setNewTaskTitle(e.target.value)} placeholder="任务目标 (例如: 背单词)" className={`w-full px-4 py-3 text-sm focus:outline-none ${theme.input}`} />
                     
                     <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block tracking-widest">选择监督人</label>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block tracking-widest">选择监督人（可多选）</label><p className="text-xs text-slate-500 mb-2">各自独立监督，不向角色提供其他监督人的身份。已选 {newTaskSupervisors.length} 位。</p>
                         {/* 分组筛选（没建分组时不渲染）。Modal 恒为白底，走浅色配色 */}
                         <CharacterGroupFilterBar characters={characters} groups={characterGroups}
                             value={supervisorGroupId} onChange={setSupervisorGroupId} className="mb-2" />
                         <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
                             {filterCharactersByGroup(characters, characterGroups, supervisorGroupId).map(c => (
-                                <button key={c.id} onClick={() => setNewTaskSupervisor(c.id)} className={`flex flex-col items-center gap-2 p-2 rounded-lg border transition-all min-w-[60px] ${newTaskSupervisor === c.id ? `${currentThemeMode === 'minimal' ? 'shadow-[inset_2px_2px_5px_#d1d9e6,inset_-2px_-2px_5px_#ffffff]' : 'border-current'}` : 'border-transparent opacity-50'}`}>
+                                <button key={c.id} aria-pressed={newTaskSupervisors.includes(c.id)} onClick={() => setNewTaskSupervisors(prev=>prev.includes(c.id)?prev.filter(id=>id!==c.id):[...prev,c.id])} className={`flex flex-col items-center gap-2 p-2 rounded-lg border transition-all min-w-[60px] ${newTaskSupervisors.includes(c.id) ? `${currentThemeMode === 'minimal' ? 'shadow-[inset_2px_2px_5px_#d1d9e6,inset_-2px_-2px_5px_#ffffff]' : 'border-current'}` : 'border-transparent opacity-50'}`}>
                                     <TokenImg value={c.avatar} className="w-10 h-10 rounded-md object-cover" />
                                     <span className={`text-[10px] font-bold whitespace-nowrap ${theme.text}`}>{c.name}</span>
                                 </button>
@@ -582,28 +545,6 @@ const ScheduleApp: React.FC = () => {
                 </div>
             </Modal>
 
-            {/* Anniversary Modal */}
-            <Modal isOpen={showAnniModal} title={currentThemeMode === 'cyber' ? "REGISTER EVENT" : "添加纪念日"} onClose={() => setShowAnniModal(false)} footer={<button onClick={handleAddAnni} className={`w-full py-3 font-bold transition-all ${theme.buttonPrimary}`}>保存记录</button>}>
-                <div className={`space-y-4 ${currentThemeMode === 'minimal' ? 'p-2' : ''}`}>
-                    <input value={newAnniTitle} onChange={e => setNewAnniTitle(e.target.value)} placeholder="事件名称 (例如: 第一次见面)" className={`w-full px-4 py-3 text-sm focus:outline-none ${theme.input}`} />
-                    <input type="date" value={newAnniDate} onChange={e => setNewAnniDate(e.target.value)} className={`w-full px-4 py-3 text-sm focus:outline-none ${theme.input}`} />
-                    
-                    <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-2 block tracking-widest">关联对象</label>
-                        {/* 分组筛选（没建分组时不渲染）。Modal 恒为白底，走浅色配色 */}
-                        <CharacterGroupFilterBar characters={characters} groups={characterGroups}
-                            value={anniCharGroupId} onChange={setAnniCharGroupId} className="mb-2" />
-                        <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
-                            {filterCharactersByGroup(characters, characterGroups, anniCharGroupId).map(c => (
-                                <button key={c.id} onClick={() => setNewAnniChar(c.id)} className={`flex flex-col items-center gap-2 p-2 rounded-lg border transition-all min-w-[60px] ${newAnniChar === c.id ? `${currentThemeMode === 'minimal' ? 'shadow-[inset_2px_2px_5px_#d1d9e6,inset_-2px_-2px_5px_#ffffff]' : 'border-current'}` : 'border-transparent opacity-50'}`}>
-                                    <TokenImg value={c.avatar} className="w-10 h-10 rounded-md object-cover" />
-                                    <span className={`text-[10px] font-bold whitespace-nowrap ${theme.text}`}>{c.name}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </Modal>
         </div>
     );
 };
@@ -611,3 +552,4 @@ const ScheduleApp: React.FC = () => {
 export default ScheduleApp;
 import { useAppShortcut } from '../utils/appShortcutLaunch';
 import { AppID as ShortcutAppID } from '../types';
+

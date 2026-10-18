@@ -1763,7 +1763,7 @@ export const OSProvider: React.FC<{ children: React.ReactNode }> = ({ children }
         finalChars = finalChars.map(c => {
           const normalized = normalizeCharacterDefaults(normalizeCharacterImpression(c));
           const migration = migrateCharacterContextRange(normalized);
-          if (migration.migrated) migratedContextCount++;
+          if (migration.migrated || normalized.systemPrompt !== c.systemPrompt || !!c.stGreetingReference) migratedContextCount++;
           if (migration.resetAutoContext) resetAutoContextCount++;
           return migration.character;
         });

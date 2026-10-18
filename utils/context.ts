@@ -1,3 +1,6 @@
+import {renderAnniversaryContext} from './sharedAnniversaries';
+import {renderSupervisedTasks} from './sharedTasks';
+import {renderSharedAgenda} from './sharedAgenda';
 import {getDailyScheduleForChar} from './dailySchedule';
 import {getLastInnerState} from './emotionState';
 import { readableContextMemories } from './contextMemories';
@@ -575,6 +578,9 @@ const renderCoreContext = async (
         if (!layout?.deferVolatile) {
             context += ContextBuilder.buildTimeAwarenessBlock(char, timeOptions);
         }
+
+        // Read only this character's shared milestones; unavailable storage must not block a reply.
+        try {const {DB}=await import('./db');context+=renderAnniversaryContext(await DB.getAllAnniversaries(),char.id);const tasks=await DB.getAllTasks();context+=renderSupervisedTasks(tasks,char.id)+renderSharedAgenda(tasks);}catch{}
 
         // 1b. 自我领悟词条 (Self Insights) — 消化过程中反刍产生的常驻自我认知
         // 像情绪底色一样影响角色的行为和感受，注入在角色设定紧下方
