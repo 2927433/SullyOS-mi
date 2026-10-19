@@ -1,3 +1,4 @@
+import {anniversaryIdentity} from './sharedAnniversaries';
 import type { ShijiOrder } from './shijiTypes';
 import { SHIJI_ORDERS } from './shijiTypes';
 import { readLocalCursor } from './localRead';
@@ -2106,14 +2107,21 @@ export const DB = {
 
   saveAnniversary: async (anniversary: Anniversary): Promise<void> => {
       const db = await openDB();
-      const transaction = db.transaction(STORE_ANNIVERSARIES, 'readwrite');
-      transaction.objectStore(STORE_ANNIVERSARIES).put(anniversary);
+      return new Promise((resolve,reject)=>{const tx=db.transaction(STORE_ANNIVERSARIES,'readwrite');tx.objectStore(STORE_ANNIVERSARIES).put(anniversary);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});
   },
-
+  saveAutomaticAnniversary: async (anniversary: Anniversary): Promise<boolean> => {
+      const db=await openDB();
+      return new Promise((resolve,reject)=>{const tx=db.transaction(STORE_ANNIVERSARIES,'readwrite'),store=tx.objectStore(STORE_ANNIVERSARIES);let saved=false;const request=store.getAll();
+       request.onsuccess=()=>{const exists=(request.result as Anniversary[]).some(e=>e.charId===anniversary.charId&&e.date===anniversary.date&&(anniversaryIdentity(e.title)===anniversaryIdentity(anniversary.title)||(e.category===anniversary.category&&['meeting','relationship','birthday','reunion'].includes(e.category||''))));if(!exists){store.put(anniversary);saved=true;}};
+       tx.oncomplete=()=>resolve(saved);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
+      });
+  },
+  saveAnniversaryThought: async (expected:Anniversary,thought:string):Promise<Anniversary|null> => {
+      const db=await openDB();return new Promise((resolve,reject)=>{const tx=db.transaction(STORE_ANNIVERSARIES,'readwrite'),store=tx.objectStore(STORE_ANNIVERSARIES);let saved:Anniversary|null=null;const request=store.get(expected.id);request.onsuccess=()=>{const current=request.result as Anniversary|undefined;if(current&&current.charId===expected.charId&&current.title===expected.title&&current.date===expected.date&&current.note===expected.note){saved={...current,aiThought:thought,lastThoughtGeneratedAt:Date.now()};store.put(saved);}};tx.oncomplete=()=>resolve(saved);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});
+  },
   deleteAnniversary: async (id: string): Promise<void> => {
-      const db = await openDB();
-      const transaction = db.transaction(STORE_ANNIVERSARIES, 'readwrite');
-      transaction.objectStore(STORE_ANNIVERSARIES).delete(id);
+      const db=await openDB();
+      return new Promise((resolve,reject)=>{const tx=db.transaction(STORE_ANNIVERSARIES,'readwrite');tx.objectStore(STORE_ANNIVERSARIES).delete(id);tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});
   },
 
   getRoomTodo: async (charId: string, date: string): Promise<RoomTodo | null> => {

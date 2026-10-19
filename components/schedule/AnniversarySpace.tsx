@@ -1,0 +1,38 @@
+import React,{useEffect,useLayoutEffect,useMemo,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
+import type {Anniversary,CharacterProfile} from '../../types';
+import {DB} from '../../utils/db';
+import {ANNIVERSARY_KINDS,anniversaryDayLabel,anniversaryOccurrence,inferAnniversaryKind,notifyAnniversaryChanged} from '../../utils/sharedAnniversaries';
+import {parseLocalDateKey,getCalendarDayDifference} from '../../utils/localDate';
+import {useLocalBackHandler} from '../../hooks/useLocalBackHandler';
+import './anniversarySpace.css';
+interface Props {characters:CharacterProfile[];entries:Anniversary[];selectedId:string;onSelect:(id:string)=>void;today:string;adding:boolean;onCloseAdd:()=>void;onChanged:()=>void;onError:(message:string)=>void}
+export default function AnniversarySpace({characters,entries,selectedId,onSelect,today,adding,onCloseAdd,onChanged,onError}:Props){
+ const [editing,setEditing]=useState<Anniversary|null>(null),[query,setQuery]=useState(''),[category,setCategory]=useState('all'),[busy,setBusy]=useState(false);
+ const [draft,setDraft]=useState({title:'',date:today,note:'',category:'other',repeatYearly:true,charId:selectedId});
+ const form=useRef<HTMLDivElement>(null),opened=adding||!!editing;
+ const owners=useMemo(()=>{const list=characters.map(c=>({id:c.id,name:c.name}));for(const e of entries)if(!list.some(c=>c.id===e.charId))list.push({id:e.charId||'',name:e.charId?'已移除角色 · '+e.charId.slice(-6):'未关联的旧记录'});return list;},[characters,entries]);
+ useEffect(()=>{if(!owners.some(c=>c.id===selectedId)&&owners.length)onSelect(owners[0].id);},[owners,selectedId,onSelect]);
+ useLayoutEffect(()=>{if(adding)setDraft({title:'',date:today,note:'',category:'other',repeatYearly:true,charId:selectedId});},[adding]);
+ const close=()=>{if(!busy){setEditing(null);onCloseAdd();}};
+ useLocalBackHandler(()=>{close();return true;},60,opened);
+ useEffect(()=>{if(!opened)return;const old=document.activeElement as HTMLElement|null;form.current?.focus();return()=>old?.focus();},[opened]);
+ const own=entries.filter(e=>(e.charId||'')===selectedId);
+ const visible=own.filter(e=>(category==='all'||(e.category||inferAnniversaryKind(e.title)||'other')===category)&&[e.title,e.note,e.date].join(' ').toLowerCase().includes(query.toLowerCase())).sort((a,b)=>b.date.localeCompare(a.date));
+ const next=own.filter(e=>parseLocalDateKey(e.date)).map(e=>({...e,occurrence:anniversaryOccurrence(e,today)})).filter(e=>e.occurrence>=today).sort((a,b)=>a.occurrence.localeCompare(b.occurrence))[0];
+ const edit=(entry:Anniversary)=>{setEditing(entry);setDraft({title:entry.title,date:entry.date,note:entry.note||'',category:entry.category||inferAnniversaryKind(entry.title)||'other',repeatYearly:!!entry.repeatYearly,charId:entry.charId});};
+ const save=async()=>{
+  if(!draft.title.trim()||!parseLocalDateKey(draft.date)){onError('请填写名称和有效日期');return;}
+  if(!characters.some(c=>c.id===draft.charId)){onError('请为这篇记录选择一个现有角色');return;}
+  setBusy(true);try{await DB.saveAnniversary({...editing,id:editing?.id||'anni-'+crypto.randomUUID(),title:draft.title.trim().slice(0,100),date:draft.date,charId:draft.charId,note:draft.note.trim().slice(0,2000),category:draft.category as Anniversary['category'],repeatYearly:draft.repeatYearly,source:editing?.source||'user',createdAt:editing?.createdAt||Date.now(),aiThought:undefined,lastThoughtGeneratedAt:undefined});notifyAnniversaryChanged();onSelect(draft.charId);onChanged();setEditing(null);onCloseAdd();}catch{onError('保存失败，草稿保留，请重试');}finally{setBusy(false);}
+ };
+ const remove=async(entry:Anniversary)=>{if(!window.confirm('删除「'+entry.title+'」这条纪念记录？'))return;try{await DB.deleteAnniversary(entry.id);notifyAnniversaryChanged();onChanged();}catch{onError('删除失败，原记录仍保留');}};
+ return <section className="anni-space">
+  <div className="anni-heading"><div><small>OUR LITTLE CHRONICLE</small><h2>值得一起记住的日子</h2></div><span aria-hidden="true">♡</span></div>
+  <label className="anni-owner">和谁的手账<select aria-label="纪念手账角色" value={selectedId} onChange={e=>{onSelect(e.target.value);setQuery('');setCategory('all');}}>{owners.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+  <div className="anni-summary"><div><strong>{own.length}</strong><span> 个珍藏的日子</span></div><p>{next?'下一次 · '+next.title+' · '+next.occurrence+'（还有 '+getCalendarDayDifference(today,next.occurrence)+' 天）':'慢慢来，重要的日子会在这里留下来。'}</p><small>只展示这一位角色。TA 可以记下重大节点，你也可以添加和补充。</small></div>
+  <div className="anni-filters"><input aria-label="搜索纪念日" placeholder="搜索名称、日期或备注" value={query} onChange={e=>setQuery(e.target.value)}/><select aria-label="纪念日分类" value={category} onChange={e=>setCategory(e.target.value)}><option value="all">全部分类</option>{Object.entries(ANNIVERSARY_KINDS).map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></div>
+  <div className="anni-records">{visible.map(entry=><article key={entry.id} className="anni-record"><div className="anni-record-top"><time>{entry.date}</time><span>{entry.source==='character'?'TA 记下的':entry.source==='user'?'你记下的':'原有记录'}</span></div><h3>{entry.title}</h3><div className="anni-chips"><span>{ANNIVERSARY_KINDS[entry.category||inferAnniversaryKind(entry.title)||'other']}</span><span>{anniversaryDayLabel(entry,today)}</span>{entry.repeatYearly&&<span>每年纪念</span>}</div>{entry.note&&<p>{entry.note}</p>}<div className="anni-record-actions"><button onClick={()=>edit(entry)}>编辑与补充</button><button onClick={()=>void remove(entry)}>删除</button></div></article>)}{!visible.length&&<div className="anni-empty">{query?'没有找到这条回忆。':'这里还没有记录。用右上角 + 写下你们的重要日子。'}</div>}</div>
+  {opened&&createPortal(<div className="anni-overlay" onClick={close}><div ref={form} role="dialog" aria-modal="true" aria-label={editing?'编辑纪念日':'添加纪念日'} tabIndex={-1} className="anni-editor" onClick={e=>e.stopPropagation()} onKeyDown={e=>{if(e.key==='Escape'){e.stopPropagation();close();}if(e.key==='Tab'){const nodes=Array.from(form.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input,select,textarea')||[]),first=nodes[0],last=nodes[nodes.length-1];if(e.shiftKey&&(document.activeElement===first||document.activeElement===form.current)){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}}}><header><h3>{editing?'补充这段回忆':'新的纪念日'}</h3><button disabled={busy} onClick={close}>取消</button></header><div className="anni-editor-fields"><label>名称<input aria-label="纪念日名称" maxLength={100} value={draft.title} onChange={e=>setDraft({...draft,title:e.target.value})} placeholder="例如：我们确认关系的那天"/></label><label>原事件日期<input aria-label="纪念日日期" type="date" value={draft.date} onChange={e=>setDraft({...draft,date:e.target.value})}/></label><label>所属角色<select aria-label="所属角色" value={draft.charId} onChange={e=>setDraft({...draft,charId:e.target.value})}><option value="" disabled>请选择角色</option>{characters.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label><label>分类<select aria-label="编辑纪念日分类" value={draft.category} onChange={e=>setDraft({...draft,category:e.target.value})}>{Object.entries(ANNIVERSARY_KINDS).map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></label><label>这一天为什么重要<textarea aria-label="纪念日备注" rows={4} maxLength={2000} value={draft.note} onChange={e=>setDraft({...draft,note:e.target.value})} placeholder="补充属于你们的细节……"/></label><label className="anni-check"><input type="checkbox" checked={draft.repeatYearly} onChange={e=>setDraft({...draft,repeatYearly:e.target.checked})}/>每年纪念这一天</label><small>保留原事件日期；2 月 29 日在非闰年按 2 月 28 日显示。</small></div><footer><button disabled={busy} onClick={()=>void save()}>{busy?'保存中…':'保存这一天'}</button></footer></div></div>,document.body)}
+ </section>;
+}

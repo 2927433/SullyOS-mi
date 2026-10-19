@@ -1,3 +1,4 @@
+import {validateAutomaticAnniversary,notifyAnniversaryChanged} from './sharedAnniversaries';
 import { withReplyCancellation, type ReplyRun } from './chatReplyCancellation';
 
 import { DB } from './db';
@@ -449,19 +450,19 @@ export const ChatParser = {
             content = content.replace(NEWS_CARD_GLOBAL_RE, '').trim();
         }
 
-        // ADD_EVENT
-        const eventMatch = content.match(/\[\[ACTION:ADD_EVENT\s*\|\s*(.*?)\s*\|\s*(.*?)\]\]/);
-        if (eventMatch) {
-            const title = eventMatch[1].trim();
-            const date = eventMatch[2].trim();
-            if (title && date) {
-                const anni: any = { id: `anni-${Date.now()}`, title: title, date: date, charId };
-                await replyStep(async () => DB.saveAnniversary(anni));
-                addToast(`${charName} 添加了新日程: ${title}`, 'success');
-                await replyStep(async () => persist({ charId, role: 'system', type: 'text', content: `[系统: ${charName} 新增了日程 "${title}" (${date})]` }));
-            }
-            content = content.replace(eventMatch[0], '').trim();
+        // At most one major anniversary per response, always owned by this char.
+        const eventRegex=/\[\[ACTION:ADD_EVENT\s*\|([^\]\n]+)\]\]/g;
+        const eventMatches=[...content.matchAll(eventRegex)];
+        for(const event of eventMatches){
+            const [title='',date='',kind,reason]=event[1].split('|').map(s=>s.trim());
+            const valid=validateAutomaticAnniversary(title,date,kind,reason);
+            if(!valid)continue;
+            const anni={id:'anni-'+crypto.randomUUID(),...valid,charId,source:'character' as const,repeatYearly:true,createdAt:Date.now()};
+            const saved=await replyStep(()=>DB.saveAutomaticAnniversary(anni));
+            if(saved){notifyAnniversaryChanged();addToast(charName+' 记下了纪念日：'+title,'success');await replyStep(()=>persist({charId,role:'system',type:'text',content:'[系统: '+charName+' 已记下纪念日「'+title+'」 ('+date+')]'}));}
+            break;
         }
+        content=content.replace(eventRegex,'').trim();
 
         // SCHEDULE
         const scheduleRegex = /\[schedule_message \| (.*?) \| fixed \| (.*?)\]/g;
