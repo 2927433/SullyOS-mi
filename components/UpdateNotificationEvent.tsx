@@ -620,7 +620,7 @@ const UserLocationAnnouncement: React.FC<UpdatePopupProps> = ({ onDone, onExit }
 };
 
 const UPDATE_QUEUE: { key: string; render: (props: UpdatePopupProps) => React.ReactNode }[] = [
-    {key:MI_RELEASE_NOTICE_KEY,render:props=><MiReleaseNotes onClose={()=>{markUpdateSeen(MI_RELEASE_NOTICE_KEY);props.onDone();}}/>},
+    {key:MI_RELEASE_NOTICE_KEY,render:props=><MiReleaseNotes onClose={()=>{markUpdateSeen(MI_RELEASE_NOTICE_KEY);props.onDone();}} onNavigate={()=>{markUpdateSeen(MI_RELEASE_NOTICE_KEY);props.onExit();}}/>},
     { key: USER_LOCATION_NOTICE_KEY, render: props => <UserLocationAnnouncement {...props} /> },
     { key: NAVIGATION_BALL_NOTICE_KEY, render: props => <NavigationBallAnnouncement {...props} /> },
     { key: HOME_UPDATE_KEY, render: props => <HomeUpdateAnnouncement {...props} /> },

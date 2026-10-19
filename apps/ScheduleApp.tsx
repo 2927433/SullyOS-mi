@@ -88,7 +88,7 @@ const ScheduleApp: React.FC = () => {
     const [anniversaries, setAnniversaries] = useState<Anniversary[]>([]);
     const [anniSelectedId,setAnniSelectedId]=useState(activeCharacterId||characters[0]?.id||'');
     const [activeTab, setActiveTab] = useState<'quest' | 'server_events' | 'personal'>('quest');
-    useAppShortcut(ShortcutAppID.Schedule, intent => setActiveTab(intent.entryId === 'server_events' ? 'server_events' : 'quest'));
+    useAppShortcut(ShortcutAppID.Schedule, intent => setActiveTab(intent.entryId === 'personal' ? 'personal' : intent.entryId === 'server_events' ? 'server_events' : 'quest'));
     
     // Processing State for feedback
     const [processingTaskIds, setProcessingTaskIds] = useState<Set<string>>(new Set());
