@@ -391,18 +391,12 @@ const ScheduleApp: React.FC = () => {
 
              {/* Header */}
              <div className={`border-b ${theme.border} backdrop-blur-sm sticky top-0 z-20 shrink-0 relative transition-colors duration-300`} style={{ paddingTop: 'var(--safe-top)' }}>
-                <div className="pt-12 pb-4 px-6 flex items-center justify-between h-24 box-border">
+                <div className="pt-5 pb-3 px-6 flex items-center justify-between box-border">
                 <button onClick={closeApp} className={`p-2 -ml-2 rounded-full active:scale-90 transition-transform ${currentThemeMode === 'minimal' ? 'bg-[#eef2f6] shadow-[4px_4px_8px_#d1d9e6,-4px_-4px_8px_#ffffff]' : 'hover:bg-black/5'}`}>
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className={`w-6 h-6 ${theme.accent}`}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" /></svg>
                 </button>
 
-                {/* Tabs */}
-                <div className={`flex gap-1 p-1 rounded-lg ${currentThemeMode === 'cyber' ? 'bg-black/40 border border-cyan-900/50' : (currentThemeMode === 'minimal' ? 'bg-[#eef2f6] shadow-[inset_2px_2px_5px_#d1d9e6,inset_-2px_-2px_5px_#ffffff]' : 'bg-white/50')}`}>
-                    <button onClick={() => { setActiveTab('quest'); trackEvent('切换日程标签页', { tab: 'quest' }); }} className={`px-2 py-1.5 rounded text-xs font-bold transition-all ${activeTab === 'quest' ? `${theme.accent} ${currentThemeMode === 'cyber' ? 'bg-cyan-900/50 shadow-sm' : (currentThemeMode === 'minimal' ? 'shadow-[2px_2px_5px_#d1d9e6,-2px_-2px_5px_#ffffff] bg-[#eef2f6]' : 'bg-white shadow-sm')}` : `${theme.textSub}`}`}>心愿单</button>
-                    <button onClick={() => { setActiveTab('server_events'); trackEvent('切换日程标签页', { tab: 'server_events' }); }} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${activeTab === 'server_events' ? `${theme.accent} ${currentThemeMode === 'cyber' ? 'bg-cyan-900/50 shadow-sm' : (currentThemeMode === 'minimal' ? 'shadow-[2px_2px_5px_#d1d9e6,-2px_-2px_5px_#ffffff] bg-[#eef2f6]' : 'bg-white shadow-sm')}` : `${theme.textSub}`}`}>纪念日</button>
-                    <button onClick={()=>setActiveTab('personal')} className={`px-2 py-1.5 rounded text-xs font-bold whitespace-nowrap ${activeTab==='personal'?theme.accent:theme.textSub}`}>岁时笺</button>
-                </div>
-
+<h1 className="font-semibold text-base">时光契约</h1>
                 {/* Right Actions */}
                 <div className="flex gap-2">
                     {/* Theme Switcher */}
@@ -419,11 +413,20 @@ const ScheduleApp: React.FC = () => {
                 </div>
                 </div>
 
+<div className="px-4 pb-3">                {/* Tabs */}
+                <div className={`flex gap-1 p-1 rounded-lg ${currentThemeMode === 'cyber' ? 'bg-black/40 border border-cyan-900/50' : (currentThemeMode === 'minimal' ? 'bg-[#eef2f6] shadow-[inset_2px_2px_5px_#d1d9e6,inset_-2px_-2px_5px_#ffffff]' : 'bg-white/50')}`}>
+                    <button onClick={() => { setActiveTab('quest'); trackEvent('切换日程标签页', { tab: 'quest' }); }} className={`flex-1 min-h-11 whitespace-nowrap px-2 py-1.5 rounded text-xs font-bold transition-all ${activeTab === 'quest' ? `${theme.accent} ${currentThemeMode === 'cyber' ? 'bg-cyan-900/50 shadow-sm' : (currentThemeMode === 'minimal' ? 'shadow-[2px_2px_5px_#d1d9e6,-2px_-2px_5px_#ffffff] bg-[#eef2f6]' : 'bg-white shadow-sm')}` : `${theme.textSub}`}`}>心愿单</button>
+                    <button onClick={() => { setActiveTab('server_events'); trackEvent('切换日程标签页', { tab: 'server_events' }); }} className={`flex-1 min-h-11 whitespace-nowrap px-4 py-1.5 rounded text-xs font-bold transition-all ${activeTab === 'server_events' ? `${theme.accent} ${currentThemeMode === 'cyber' ? 'bg-cyan-900/50 shadow-sm' : (currentThemeMode === 'minimal' ? 'shadow-[2px_2px_5px_#d1d9e6,-2px_-2px_5px_#ffffff] bg-[#eef2f6]' : 'bg-white shadow-sm')}` : `${theme.textSub}`}`}>纪念日</button>
+                    <button onClick={()=>setActiveTab('personal')} className={`flex-1 min-h-11 whitespace-nowrap px-2 py-1.5 rounded text-xs font-bold whitespace-nowrap ${activeTab==='personal'?theme.accent:theme.textSub}`}>岁时笺</button>
+                </div>
+
+</div>
                 {/* Decoration Line */}
                 {currentThemeMode === 'cyber' && <div className="absolute bottom-0 left-0 h-[1px] w-full bg-gradient-to-r from-transparent via-cyan-500/50 to-transparent"></div>}
             </div>
 
             <div className="flex-1 overflow-y-auto no-scrollbar p-6 space-y-8 z-10">
+                {activeTab==='quest'&&<button onClick={()=>setActiveTab('personal')} className={`w-full p-4 rounded-2xl border border-current/15 text-left ${theme.accent}`}><span className="block font-bold text-sm">岁时笺 · 记录我的日期安排 →</span><span className="block text-xs opacity-70 mt-1">记一次，每位角色在各自聊天里都能知道。</span></button>}
                 
                 {/* Hero Anniversary Card */}
                 {upcomingAnni && activeTab==='quest' && (
