@@ -17,6 +17,7 @@ import { formatQixiEventCardForContext, tryParseQixiEventChatCard } from './qixi
 import { formatTransferRecord } from './transferFormat';
 import { formatStatCount } from './videoParser';
 import {secretNoteContext} from './secretNote';
+import {formatShijiOrderForContext} from './shijiOrderContext';
 import { formatSARModuleEventsForContext } from './vrWorld/sarModuleRuntime';
 
 /**
@@ -114,6 +115,7 @@ export function normalizeMessageContent(
     userName: string,
 ): string {
     const type = msg.type as string;
+    if(type==='text'&&msg.metadata?.shijiOrder)return formatShijiOrderForContext(msg.metadata.shijiOrder,msg.charId);
     if (type === 'secret_note') return secretNoteContext(msg.content);
 
     // 纯视觉类给占位；语音优先使用配套转写，避免把音频资源地址送进上下文。

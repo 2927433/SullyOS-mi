@@ -1,3 +1,4 @@
+import {formatShijiOrderForContext} from './shijiOrderContext';
 import {anniversaryIdentity} from './sharedAnniversaries';
 import type { ShijiOrder } from './shijiTypes';
 import { SHIJI_ORDERS } from './shijiTypes';
@@ -1533,8 +1534,8 @@ export const DB = {
               if(share && result.sharedMessageId===undefined){
                   const targetId=result.paymentRequest?.payerId||result.recipientId;
                   if(!targetId){tx.abort();return;}
-                  const body=result.lines.map(line=>line.item.name+' ×'+line.quantity).join('、');
-                  const req=messages.add({charId:targetId,role:'user',type:'text',timestamp:Date.now(),content:(result.paymentRequest?'[拾集代付请求] 请你帮我代付这份订单，可以同意或拒绝。这是代付请求，不代表已经付款。\n':'')+'[拾集'+(result.mode==='food'?'外卖':'购物')+'订单]\n收件人：'+result.recipientName+'\n'+body+'\n合计：¥'+(result.totalCents/100).toFixed(2)+(result.note?'\n留言：'+result.note:'')+'\n（小手机内订单，非真实配送）',metadata:{shijiOrder:result}});
+
+                  const req=messages.add({charId:targetId,role:'user',type:'text',timestamp:Date.now(),content:formatShijiOrderForContext(result,targetId),metadata:{shijiOrder:result}});
                   req.onsuccess=()=>{result={...result,sharedMessageId:Number(req.result)};clearStaleMemoryMirror(tx,targetId,Number(req.result));persist();};
               }else persist();
           };
@@ -4454,4 +4455,5 @@ export const DB = {
       await ensureStoryTimelineRepair(db);
   }
 };
+
 

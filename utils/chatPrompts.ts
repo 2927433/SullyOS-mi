@@ -1132,7 +1132,7 @@ ${voiceActingGuide()}`;
         return {
             apiMessages: historySlice.map((m, index) => {
                 if (m.type === 'secret_note') return {role: m.role, content: secretNoteContext(m.content)};
-                let content: any = m.content;
+                let content: any = m.type==='text'&&m.metadata?.shijiOrder?normalizeMessageContent(m,char?.name||'你',userProfile?.name||'用户'):m.content;
                 const timeStr = timeAwarenessOn && hasReliableMessageTimestamp(m) ? `[${ChatPrompts.formatDate(m.timestamp, charTz)}]` : '';
                 const sourceTag = (() => {
                     if (m.role === 'user' && m.type === 'text' && m.metadata?.fakeVoice === true) return '[聊天·语音转写]';

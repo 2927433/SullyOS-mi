@@ -26,7 +26,7 @@ export function resolveShijiApi(global:APIConfig,app?:ShijiApi):APIConfig {
 }
 export async function generateShijiCatalog(input:{mode:ShijiMode;query:string;api:APIConfig;char?:CharacterProfile;user:UserProfile;previous?:string[];signal?:AbortSignal}):Promise<ShijiItem[]> {
  const {mode,api,char,user}=input;
- const rules=`你是拾集的虚拟${mode==='food'?'外卖菜单':'购物商品'}生成器。根据用户搜索生成 8 个不同选项，仅用于角色扮演，不搜索真实库存，不索要地址、手机号、付款信息，不声称实际配送。只输出 JSON：{"items":[{"name":"商品名","description":"规格/口味与简短介绍","shop":"虚构店名","category":"分类","emoji":"一个相关emoji","price":29.9}]}。price 为人民币元，0.01–999999.99，最多两位小数。输出商品，不输出角色对白或思考。若给出角色资料，只用于匹配品味，不代替用户下单。`;
+ const rules=`你是拾集的${mode==='food'?'外卖菜单':'购物商品'}生成器。根据用户搜索生成 8 个不同选项，不搜索真实库存，不索要地址、手机号、付款信息，不声称实际配送。商品名称、介绍和店名保持自然，不添加“虚拟商品”“角色扮演道具”或应用实现说明；不在商品文案中打破当前世界观。只输出 JSON：{"items":[{"name":"商品名","description":"规格/口味与简短介绍","shop":"店名","category":"分类","emoji":"一个相关emoji","price":29.9}]}。price 为人民币元，0.01–999999.99，最多两位小数。输出商品，不输出角色对白或思考。若给出角色资料，只用于匹配品味，不代替用户下单。`;
  const task=[{role:'system',content:rules},{role:'user',content:`搜索：${input.query.trim().slice(0,300)|| (mode==='food'?'今天吃点什么':'日常好物推荐')}。请换一批，避免重复这些名称：${(input.previous || []).slice(0,20).join('、')}`}];
  const messages=char?await ContextBuilder.buildCharacterRequest({char,user},task):task;
  input.signal?.throwIfAborted();
@@ -52,3 +52,4 @@ export async function commitShijiOrder(order:ShijiOrder,share=false):Promise<Shi
  if(order.recipientId && !(await DB.getAllCharacters()).some(c=>c.id===order.recipientId))throw new Error('该角色已不存在，请重新选择');
  return DB.commitShijiOrder(order,share);
 }
+
