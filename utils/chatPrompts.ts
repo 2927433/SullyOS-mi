@@ -1173,21 +1173,21 @@ ${voiceActingGuide()}`;
                     content = '[' + speaker + '引用了' + whose + '「' + quoted + '」，并回复了 ↓]\n' + content;
                 }
                 
-                if (m.type === 'image') {
+                if (m.type === 'image' || m.type === 'emoji') {
                      // Assistant image blocks are rejected by Claude-compatible upstreams.
                      // Keep the sender and saved description, without changing stored images
                      // or pretending the character's outgoing image was uploaded by the user.
                      if (m.role === 'assistant') {
                          const description = typeof m.metadata?.visionDescription === 'string'
                              ? m.metadata.visionDescription.trim() : '';
-                         return { role: m.role, content: `${timeStr} [你向用户发送了一张图片${description ? '：' + description : '；未提供画面描述'}]`.trimStart() };
+                         return { role: m.role, content: `${timeStr} [你向用户发送了${m.type==='emoji'?'一个表情包':'一张图片'}${description ? '：' + description : '；未提供画面描述'}]`.trimStart() };
                      }
                      const visionDescription = options?.useVisionDescriptions
                          && typeof m.metadata?.visionDescription === 'string'
                          ? m.metadata.visionDescription.trim()
                          : '';
                      if (visionDescription) {
-                         let textPart = `${timeStr} [图片：${visionDescription}]`;
+                         let textPart = `${timeStr} [${m.type==='emoji'?'表情包':'图片'}：${visionDescription}]`;
                          if (index === historySlice.length - 1 && timeGapHint && m.role === 'user') textPart += `\n\n${timeGapHint}`;
                          return { role: m.role, content: textPart.trimStart() };
                      }
@@ -1199,8 +1199,8 @@ ${voiceActingGuide()}`;
                      const hasImageData = typeof m.content === 'string'
                          && (m.content.startsWith('data:') || m.content.startsWith('http') || isBlobRef(m.content));
                      let textPart = hasImageData
-                         ? `${timeStr} [User sent an image]`
-                         : `${timeStr} [User sent an image, but the image data is no longer available]`;
+                         ? `${timeStr} [User sent ${m.type==='emoji'?'a sticker':'an image'}]`
+                         : `${timeStr} [User sent ${m.type==='emoji'?'a sticker':'an image'}, but the image data is no longer available]`;
                      if (index === historySlice.length - 1 && timeGapHint && m.role === 'user') textPart += `\n\n${timeGapHint}`;
                      if (!hasImageData) {
                          return { role: m.role, content: textPart.trimStart() };

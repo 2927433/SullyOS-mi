@@ -120,7 +120,10 @@ export function normalizeMessageContent(
 
     // 纯视觉类给占位；语音优先使用配套转写，避免把音频资源地址送进上下文。
     if (type === 'image') return '[图片]';
-    if (type === 'emoji') return '[表情包]';
+    if (type === 'emoji') {
+        const description=typeof msg.metadata?.visionDescription==='string'?msg.metadata.visionDescription.trim():'';
+        return description?`[表情包：${description}]`:'[表情包]';
+    }
     if (type === 'voice') {
         const transcript = getVoiceTranscript(msg);
         return transcript ? `[语音转写] ${transcript}` : '[语音]';

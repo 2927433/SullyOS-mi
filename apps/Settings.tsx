@@ -2660,7 +2660,7 @@ const Settings: React.FC = () => {
                         <div>
                             <div className="text-xs font-bold text-slate-600">接入独立识图 API</div>
                             <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
-                                适合 DeepSeek 等不能直接看图的主模型。
+                                适合 DeepSeek 等不能直接看图的主模型；开启后，新发送的图片和表情包都会识图，角色能理解画面、文字和 meme 含义。
                             </p>
                         </div>
                         <button
