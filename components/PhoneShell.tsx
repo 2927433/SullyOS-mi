@@ -56,7 +56,7 @@ const MusicApp = lazyApp(() => import('../apps/MusicApp'));
 const CallApp = lazyApp(() => import('../apps/CallApp'));
 const VoiceDesignerApp = lazyApp(() => import('../apps/VoiceDesignerApp'));
 const GuidebookApp = lazyApp(() => import('../apps/GuidebookApp'));
-const LifeSimApp = lazyApp(() => import('../apps/AstrologyApp'));
+const LifeSimApp = lazyApp(() => import('../apps/LifeSimApp'));
 const MemoryPalaceApp = lazyApp(() => import('../apps/MemoryPalaceApp'));
 const HandbookApp = lazyApp(() => import('../apps/HandbookApp'));
 const QQBridge = lazyApp(() => import('../apps/QQBridge'));
