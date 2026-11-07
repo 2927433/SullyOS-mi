@@ -1,3 +1,5 @@
+import HealthShortcutReceiver from './lifeRecord/HealthShortcutReceiver';
+const SoloDiaryRuntime = React.lazy(() => import('./journal/SoloDiaryRuntime').catch(error => { console.warn('自动日记模块加载失败，下次打开重试', error); return {default: () => null}; }));
 import FirstUseGuide from './FirstUseGuide';
 import FeedbackInvitation from './FeedbackInvitation';
 import BeautyRepoInvitation from './share/BeautyRepoInvitation';
@@ -49,7 +51,7 @@ const BankApp = lazyApp(() => import('../apps/BankApp'));
 const XhsStockApp = lazyApp(() => import('../apps/XhsStockApp'));
 const XhsFreeRoamApp = lazyApp(() => import('../apps/XhsFreeRoamApp'));
 const BrowserApp = lazyApp(() => import('../apps/BrowserApp'));
-const SongwritingApp = lazyApp(() => import('../apps/SongwritingApp'));
+const ShijiApp = lazyApp(() => import('../apps/ShijiApp'));
 const MusicApp = lazyApp(() => import('../apps/MusicApp'));
 const CallApp = lazyApp(() => import('../apps/CallApp'));
 const VoiceDesignerApp = lazyApp(() => import('../apps/VoiceDesignerApp'));
@@ -70,7 +72,7 @@ const APP_IDLE_PRELOAD_ORDER: PreloadableLazy[] = [
   Chat, Character, Settings, Appearance, GroupChat, RoomApp, CheckPhone,
   JournalApp, ScheduleApp, SocialApp, MusicApp, CallApp, Gallery, DateApp, UserApp,
   StudyApp, GameApp, NovelApp, BankApp, WorldbookApp, MemoryPalaceApp, HandbookApp,
-  VRWorldApp, WorldHomeApp, LifeSimApp, SongwritingApp, GuidebookApp, FAQApp, HotNewsApp,
+  VRWorldApp, WorldHomeApp, LifeSimApp, ShijiApp, GuidebookApp, FAQApp, HotNewsApp,
   XhsStockApp, XhsFreeRoamApp, BrowserApp, VoiceDesignerApp, ThemeMaker, QQBridge,
   SpecialMomentsApp, CharCreatorDevApp,
 ];
@@ -89,7 +91,7 @@ const APP_BY_ID: Partial<Record<AppID, PreloadableLazy>> = {
   [AppID.CheckPhone]: CheckPhone, [AppID.Social]: SocialApp, [AppID.Study]: StudyApp,
   [AppID.FAQ]: FAQApp, [AppID.Game]: GameApp, [AppID.Worldbook]: WorldbookApp,
   [AppID.Novel]: NovelApp, [AppID.Bank]: BankApp, [AppID.XhsStock]: XhsStockApp,
-  [AppID.XhsFreeRoam]: XhsFreeRoamApp, [AppID.Browser]: BrowserApp, [AppID.Songwriting]: SongwritingApp,
+  [AppID.XhsFreeRoam]: XhsFreeRoamApp, [AppID.Browser]: BrowserApp, [AppID.Songwriting]: ShijiApp,
   [AppID.Music]: MusicApp, [AppID.Call]: CallApp, [AppID.VoiceDesigner]: VoiceDesignerApp,
   [AppID.Guidebook]: GuidebookApp, [AppID.LifeSim]: LifeSimApp, [AppID.MemoryPalace]: MemoryPalaceApp,
   [AppID.Handbook]: HandbookApp, [AppID.QQBridge]: QQBridge, [AppID.HotNews]: HotNewsApp,
@@ -957,7 +959,7 @@ const PhoneShell: React.FC = () => {
       case AppID.XhsStock: return <XhsStockApp />;
       case AppID.XhsFreeRoam: return <XhsFreeRoamApp />;
       case AppID.Browser: return <BrowserApp />;
-      case AppID.Songwriting: return <SongwritingApp />;
+      case AppID.Songwriting: return <ShijiApp />;
       case AppID.Music: return <MusicApp />;
       case AppID.Call: return <CallApp />;
       case AppID.VoiceDesigner: return <VoiceDesignerApp />;
@@ -1103,6 +1105,8 @@ const PhoneShell: React.FC = () => {
          />
        )}
 
+       <HealthShortcutReceiver />
+       {isDataLoaded && !isLocked && <Suspense fallback={null}><SoloDiaryRuntime /></Suspense>}
        {/* 见面 · 剧情首映：解锁后一次性出现 */}
        {!anniversaryHasPriority && !showDisclaimer && !showImportRecoveryPrompt && !showAuthorLetter && showUpdateNotification && (
          <UpdateNotificationController onClose={() => setShowUpdateNotification(false)} />
