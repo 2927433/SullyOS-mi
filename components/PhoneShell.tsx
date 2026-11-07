@@ -39,14 +39,15 @@ const DateApp = lazyApp(() => import('../apps/DateApp'));
 const UserApp = lazyApp(() => import('../apps/UserApp'));
 const JournalApp = lazyApp(() => import('../apps/JournalApp'));
 const ScheduleApp = lazyApp(() => import('../apps/ScheduleApp'));
+const AcademicApp = lazyApp(() => import('../apps/AcademicApp'));
 const RoomApp = lazyApp(() => import('../apps/RoomApp'));
 const CheckPhone = lazyApp(() => import('../apps/CheckPhone'));
-const SocialApp = lazyApp(() => import('../apps/SocialApp'));
 const StudyApp = lazyApp(() => import('../apps/StudyApp'));
 const FAQApp = lazyApp(() => import('../apps/FAQApp'));
 const GameApp = lazyApp(() => import('../apps/GameApp'));
 const WorldbookApp = lazyApp(() => import('../apps/WorldbookApp'));
 const NovelApp = lazyApp(() => import('../apps/NovelApp'));
+const CourseScheduleApp = lazyApp(() => import('../apps/CourseScheduleApp'));
 const BankApp = lazyApp(() => import('../apps/BankApp'));
 const XhsStockApp = lazyApp(() => import('../apps/XhsStockApp'));
 const XhsFreeRoamApp = lazyApp(() => import('../apps/XhsFreeRoamApp'));
@@ -56,11 +57,12 @@ const MusicApp = lazyApp(() => import('../apps/MusicApp'));
 const CallApp = lazyApp(() => import('../apps/CallApp'));
 const VoiceDesignerApp = lazyApp(() => import('../apps/VoiceDesignerApp'));
 const GuidebookApp = lazyApp(() => import('../apps/GuidebookApp'));
-const LifeSimApp = lazyApp(() => import('../apps/AstrologyApp'));
+const OwlLettersApp = lazyApp(() => import('../apps/OwlLettersApp'));
 const MemoryPalaceApp = lazyApp(() => import('../apps/MemoryPalaceApp'));
 const HandbookApp = lazyApp(() => import('../apps/HandbookApp'));
 const QQBridge = lazyApp(() => import('../apps/QQBridge'));
 const HotNewsApp = lazyApp(() => import('../apps/HotNewsApp'));
+const CampusForumApp = lazyApp(() => import('../apps/CampusForumApp'));
 const VRWorldApp = lazyApp(() => import('../apps/VRWorldApp'));
 const WorldHomeApp = lazyApp(() => import('../apps/WorldHomeApp'));
 const CharCreatorDevApp = lazyApp(() => import('../apps/CharCreatorDevApp'));
@@ -70,9 +72,9 @@ const SpecialMomentsApp = lazyApp(() => import('./ValentineEvent').then(m => ({ 
 // 高频 App 在前；低端设备/省流量/2G 由 shouldUseIdleAppPreload 整体跳过。
 const APP_IDLE_PRELOAD_ORDER: PreloadableLazy[] = [
   Chat, Character, Settings, Appearance, GroupChat, RoomApp, CheckPhone,
-  JournalApp, ScheduleApp, SocialApp, MusicApp, CallApp, Gallery, DateApp, UserApp,
-  StudyApp, GameApp, NovelApp, BankApp, WorldbookApp, MemoryPalaceApp, HandbookApp,
-  VRWorldApp, WorldHomeApp, LifeSimApp, ShijiApp, GuidebookApp, FAQApp, HotNewsApp,
+  JournalApp, ScheduleApp, AcademicApp, MusicApp, CallApp, Gallery, DateApp, UserApp,
+  StudyApp, GameApp, CourseScheduleApp, BankApp, WorldbookApp, MemoryPalaceApp, HandbookApp,
+  VRWorldApp, WorldHomeApp, OwlLettersApp, ShijiApp, GuidebookApp, FAQApp, HotNewsApp, CampusForumApp,
   XhsStockApp, XhsFreeRoamApp, BrowserApp, VoiceDesignerApp, ThemeMaker, QQBridge,
   SpecialMomentsApp, CharCreatorDevApp,
 ];
@@ -87,14 +89,14 @@ const APP_BY_ID: Partial<Record<AppID, PreloadableLazy>> = {
   [AppID.Settings]: Settings, [AppID.Character]: Character, [AppID.Chat]: Chat,
   [AppID.GroupChat]: GroupChat, [AppID.ThemeMaker]: ThemeMaker, [AppID.Appearance]: Appearance,
   [AppID.Gallery]: Gallery, [AppID.Date]: DateApp, [AppID.User]: UserApp,
-  [AppID.Journal]: JournalApp, [AppID.Schedule]: ScheduleApp, [AppID.Room]: RoomApp,
-  [AppID.CheckPhone]: CheckPhone, [AppID.Social]: SocialApp, [AppID.Study]: StudyApp,
+  [AppID.Journal]: JournalApp, [AppID.Schedule]: ScheduleApp, [AppID.Academic]: AcademicApp, [AppID.Room]: RoomApp,
+  [AppID.CheckPhone]: CheckPhone, [AppID.Study]: StudyApp,
   [AppID.FAQ]: FAQApp, [AppID.Game]: GameApp, [AppID.Worldbook]: WorldbookApp,
-  [AppID.Novel]: NovelApp, [AppID.Bank]: BankApp, [AppID.XhsStock]: XhsStockApp,
+  [AppID.Novel]: CourseScheduleApp, [AppID.Bank]: BankApp, [AppID.XhsStock]: XhsStockApp,
   [AppID.XhsFreeRoam]: XhsFreeRoamApp, [AppID.Browser]: BrowserApp, [AppID.Songwriting]: ShijiApp,
   [AppID.Music]: MusicApp, [AppID.Call]: CallApp, [AppID.VoiceDesigner]: VoiceDesignerApp,
-  [AppID.Guidebook]: GuidebookApp, [AppID.LifeSim]: LifeSimApp, [AppID.MemoryPalace]: MemoryPalaceApp,
-  [AppID.Handbook]: HandbookApp, [AppID.QQBridge]: QQBridge, [AppID.HotNews]: HotNewsApp,
+  [AppID.Guidebook]: GuidebookApp, [AppID.LifeSim]: OwlLettersApp, [AppID.MemoryPalace]: MemoryPalaceApp,
+  [AppID.Handbook]: HandbookApp, [AppID.QQBridge]: QQBridge, [AppID.Social]: CampusForumApp, [AppID.HotNews]: HotNewsApp,
   [AppID.VRWorld]: VRWorldApp, [AppID.CharCreatorDev]: CharCreatorDevApp, [AppID.SpecialMoments]: SpecialMomentsApp,
   [AppID.WorldHome]: WorldHomeApp,
 };
@@ -273,55 +275,6 @@ const getImportPhaseLabel = (phase?: string) => {
 
 
 
-const DisclaimerPopup: React.FC<{ onAccept: () => void }> = ({ onAccept }) => (
-  <div className="fixed inset-0 z-[9999] flex items-center justify-center p-5 animate-fade-in">
-    <div className="absolute inset-0 bg-black/60 backdrop-blur-md" />
-    <div className="relative w-full max-w-sm bg-white/95 backdrop-blur-xl rounded-[2.5rem] shadow-2xl border border-white/30 overflow-hidden animate-slide-up">
-      {/* Header */}
-      <div className="pt-7 pb-3 px-6 text-center">
-        <img src="https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/1f4e2.png" alt="announcement" className="w-8 h-8 mb-2" />
-        <h2 className="text-lg font-extrabold text-slate-800">使用与授权说明</h2>
-        <p className="text-[11px] text-slate-400 mt-1">Usage & License · SullyOS·糯米机</p>
-      </div>
-
-      {/* Content */}
-      <div className="px-6 pb-4 max-h-[55vh] overflow-y-auto no-scrollbar space-y-3">
-        <p className="text-[13px] text-slate-600 leading-relaxed">
-          本项目「SullyOS·糯米机」是一个<strong className="text-slate-800">源码可见、免费使用</strong>的项目。源码供学习与参考，不代表授予二改、再分发或官方服务的访问权限。
-        </p>
-        <p className="text-[13px] text-slate-600 leading-relaxed">二改授权通过官方 DC 社区提供，具体范围以社区授权说明为准。社区不定期开放；未经另行许可，不得对外分发原版、修改版或整合包。</p>
-        <p className="text-[13px] text-slate-600 leading-relaxed">官方服务受后端容量限制，请勿向社区外转发访问入口、邀请信息或下载资源，也请勿自行组织对外推广。二改授权不包含共享官方后端资源。</p>
-        <p className="text-[13px] text-slate-600 leading-relaxed">完整规则以随版本提供的源码许可与社区授权说明为准；旧版本既有许可及第三方许可分别适用。</p>
-        <ul className="text-[12px] text-slate-500 leading-relaxed space-y-1.5 list-none">
-          <li className="flex gap-2"><span className="shrink-0">•</span><span>在法律允许的范围内，本软件按现状提供，不附带保证；法律规定不得排除或限制的责任除外。</span></li>
-          <li className="flex gap-2"><span className="shrink-0">•</span><span>用户应自行承担使用本软件的一切风险，包括但不限于数据丢失、设备损坏等。</span></li>
-          <li className="flex gap-2"><span className="shrink-0">•</span><span>本软件生成的任何 AI 内容均不代表作者立场，用户需自行判断内容的准确性与合规性。</span></li>
-          <li className="flex gap-2"><span className="shrink-0">•</span><span>禁止将本软件用于任何违反当地法律法规的用途。</span></li>
-        </ul>
-
-        {/* Highlighted warning */}
-        <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-4 mt-3">
-          <p className="text-[13px] font-bold text-red-600 text-center leading-relaxed">
-            本程序完全免费！<br />
-            如果您是通过<span className="underline decoration-2 decoration-red-400">付费购买</span>获得此程序的，说明您已被倒卖欺骗。<br />
-            请向售卖者维权追责！
-          </p>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="px-6 pb-7 pt-2">
-        <button
-          onClick={onAccept}
-          className="w-full py-3.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-bold rounded-2xl shadow-lg shadow-indigo-200 active:scale-95 transition-transform text-sm"
-        >
-          我已知悉，继续使用
-        </button>
-      </div>
-    </div>
-  </div>
-);
-
 const ImportRecoveryPopup: React.FC<{
   marker: ImportRecoveryMarker | null;
   onLater: () => void;
@@ -472,7 +425,8 @@ const PhoneShell: React.FC = () => {
 
   // 冷启动「世界入场」是否已结束。结束前由 BootSequence 接管整屏（同时取代旧的黑屏 spinner）。
   const [bootDone, setBootDone] = useState(false);
-  const bootAnimationEnabled = theme.bootAnimationEnabled !== false;
+  // Magic OS不显示原糯米机的开屏动画；数据就绪后直接进入锁屏/桌面。
+  const bootAnimationEnabled = false;
   useEffect(() => {
     // 本次启动一旦选择跳过，就记为已经完成；用户稍后重新打开开关时不在桌面中途补播。
     if (!bootAnimationEnabled) setBootDone(true);
@@ -555,14 +509,8 @@ const PhoneShell: React.FC = () => {
     };
   }, [activeApp, bootDone, isDataLoaded]);
 
-  // Disclaimer popup for first-time users
-  const [showDisclaimer, setShowDisclaimer] = useState(() => {
-    try {
-      return !localStorage.getItem(DISCLAIMER_KEY);
-    } catch {
-      return true;
-    }
-  });
+  // Magic OS不显示原糯米机的授权/公告弹窗。
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
 
   const handleAcceptDisclaimer = () => {
     try {
@@ -619,12 +567,13 @@ const PhoneShell: React.FC = () => {
   const [showAnniversaryGift, setShowAnniversaryGift] = useState(false);
   const anniversaryAsked = useRef(false);
   const firstUseGuideActive = useFirstUseGuideStep() !== null;
-  const anniversaryBlocked = firstUseGuideActive || showDisclaimer || showImportRecoveryPrompt || showAuthorLetter;
+  const nativeNoticesEnabled = false;
+  const anniversaryBlocked = !nativeNoticesEnabled || firstUseGuideActive || showDisclaimer || showImportRecoveryPrompt || showAuthorLetter;
   // 待展示也占住顺序，避免同一轮 effects 同时开启赠礼和更新公告。
   // Complete setup before promotional/release popups; disclaimer/recovery still have priority.
-  const anniversaryHasPriority = firstUseGuideActive || showAnniversaryGift || (!anniversaryAsked.current && shouldShowAnniversaryGift());
+  const anniversaryHasPriority = nativeNoticesEnabled && (firstUseGuideActive || showAnniversaryGift || (!anniversaryAsked.current && shouldShowAnniversaryGift()));
   useEffect(() => {
-    if (anniversaryAsked.current || anniversaryBlocked || !isDataLoaded || isLocked || (!bootDone && bootAnimationEnabled)) return;
+    if (!nativeNoticesEnabled || anniversaryAsked.current || anniversaryBlocked || !isDataLoaded || isLocked || (!bootDone && bootAnimationEnabled)) return;
     if (shouldShowAnniversaryGift()) {
       anniversaryAsked.current = true;
       setShowAnniversaryGift(true);
@@ -643,7 +592,7 @@ const PhoneShell: React.FC = () => {
   const updateNoticeAsked = useRef(false);
 
   useEffect(() => {
-    if (updateNoticeAsked.current) return;
+    if (!nativeNoticesEnabled || updateNoticeAsked.current) return;
     if (anniversaryHasPriority || showDisclaimer || showImportRecoveryPrompt || showAuthorLetter || showUpdateNotification) return;
     if (!isDataLoaded || isLocked) return;
     if (shouldShowUpdateNotification()) {
@@ -657,7 +606,7 @@ const PhoneShell: React.FC = () => {
   const [showQixiLaunchPopup, setShowQixiLaunchPopup] = useState(false);
   const qixiLaunchAsked = useRef(false);
   useEffect(() => {
-    if (qixiLaunchAsked.current) return;
+    if (!nativeNoticesEnabled || qixiLaunchAsked.current) return;
     if (anniversaryHasPriority || showDisclaimer || showImportRecoveryPrompt || showAuthorLetter || showUpdateNotification) return;
     if (!isDataLoaded || isLocked) return;
     if (shouldShowQixiLaunchPopup()) {
@@ -671,6 +620,7 @@ const PhoneShell: React.FC = () => {
   // API 配置改成弹窗内嵌，配完直接进活动，不再需要把弹窗暂存让位给 Settings。
   const [showLike520Popup, setShowLike520Popup] = useState(false);
   useEffect(() => {
+    if (!nativeNoticesEnabled) return;
     if (anniversaryHasPriority || showDisclaimer || showImportRecoveryPrompt || showAuthorLetter || showUpdateNotification || showQixiLaunchPopup) return;
     if (!isDataLoaded) return;
     if (shouldShowLike520Popup()) setShowLike520Popup(true);
@@ -903,7 +853,7 @@ const PhoneShell: React.FC = () => {
                    <span>🍃</span><span>无人岛生活</span><span>🍃</span>
                </div>
            ) : (
-               <div className="text-lg tracking-widest opacity-90 mt-2 uppercase text-xs font-bold">SullyOS·糯米机 Simulation</div>
+               <div className="text-lg tracking-widest opacity-90 mt-2 uppercase text-xs font-bold">Magic OS Simulation</div>
            )}
         </div>}
 
@@ -947,14 +897,14 @@ const PhoneShell: React.FC = () => {
       case AppID.User: return <UserApp />;
       case AppID.Journal: return <JournalApp />; 
       case AppID.Schedule: return <ScheduleApp />;
+      case AppID.Academic: return <AcademicApp />;
       case AppID.Room: return <RoomApp />; 
       case AppID.CheckPhone: return <CheckPhone />;
-      case AppID.Social: return <SocialApp />;
       case AppID.Study: return <StudyApp />; 
       case AppID.FAQ: return <FAQApp />; 
       case AppID.Game: return <GameApp />; 
       case AppID.Worldbook: return <WorldbookApp />;
-      case AppID.Novel: return <NovelApp />; 
+      case AppID.Novel: return <CourseScheduleApp />;
       case AppID.Bank: return <BankApp />;
       case AppID.XhsStock: return <XhsStockApp />;
       case AppID.XhsFreeRoam: return <XhsFreeRoamApp />;
@@ -964,10 +914,11 @@ const PhoneShell: React.FC = () => {
       case AppID.Call: return <CallApp />;
       case AppID.VoiceDesigner: return <VoiceDesignerApp />;
       case AppID.Guidebook: return <GuidebookApp />;
-      case AppID.LifeSim: return <LifeSimApp />;
+      case AppID.LifeSim: return <OwlLettersApp />;
       case AppID.MemoryPalace: return <MemoryPalaceApp />;
       case AppID.Handbook: return <HandbookApp />;
       case AppID.QQBridge: return <QQBridge />;
+      case AppID.Social: return <CampusForumApp />;
       case AppID.HotNews: return <HotNewsApp />;
       case AppID.SpecialMoments: return <SpecialMomentsApp />;
       case AppID.VRWorld: return <VRWorldApp />;
@@ -993,14 +944,18 @@ const PhoneShell: React.FC = () => {
          className="absolute inset-0 bg-cover bg-center transition-all duration-500 ease-[cubic-bezier(0.25,0.1,0.25,1)]"
          style={{
              backgroundImage: bgImageValue,
-             filter: activeApp !== AppID.Launcher ? 'blur(10px)' : 'none',
+             // A full-screen CSS blur forces WebKit to repaint the wallpaper
+             // into an off-screen surface while every app is open. iOS PWA
+             // mode already has a translucent app scrim, so skip this costly
+             // blur there and keep the wallpaper static.
+             filter: activeApp !== AppID.Launcher && !useIOSStandaloneLayout ? 'blur(10px)' : 'none',
              opacity: activeApp !== AppID.Launcher ? 0.6 : 1,
              backfaceVisibility: 'hidden',
              contain: useIOSStandaloneLayout ? undefined : 'strict'
          }}
        />
        
-       <div className={`absolute inset-0 transition-all duration-500 ${activeApp === AppID.Launcher ? 'bg-transparent' : 'bg-white/50 backdrop-blur-3xl'}`} />
+       <div className={`absolute inset-0 ${activeApp === AppID.Launcher ? 'bg-transparent' : useIOSStandaloneLayout ? 'bg-white/35' : 'bg-white/50 backdrop-blur-3xl'}`} />
        
        {/* 外壳安全区两种策略：
           - 未迁移 App：外壳铺满 body（含 --app-height 多出的 +safe-bottom 溢出区），用 padding 让位安全区，
@@ -1083,14 +1038,12 @@ const PhoneShell: React.FC = () => {
        />
 
        {/* First-time disclaimer popup */}
-       {!anniversaryBlocked && !isLocked && showAnniversaryGift && (
+       {nativeNoticesEnabled && !anniversaryBlocked && !isLocked && showAnniversaryGift && (
          <AnniversaryGiftPopup onClose={() => {
            markAnniversaryGiftSeen();
            setShowAnniversaryGift(false);
          }} />
        )}
-       {showDisclaimer && <DisclaimerPopup onAccept={handleAcceptDisclaimer} />}
-
        {/* Interrupted import recovery reminder */}
        {!showDisclaimer && showImportRecoveryPrompt && (
          <ImportRecoveryPopup
@@ -1108,17 +1061,17 @@ const PhoneShell: React.FC = () => {
        <HealthShortcutReceiver />
        {isDataLoaded && !isLocked && <Suspense fallback={null}><SoloDiaryRuntime /></Suspense>}
        {/* 见面 · 剧情首映：解锁后一次性出现 */}
-       {!anniversaryHasPriority && !showDisclaimer && !showImportRecoveryPrompt && !showAuthorLetter && showUpdateNotification && (
+       {nativeNoticesEnabled && !anniversaryHasPriority && !showDisclaimer && !showImportRecoveryPrompt && !showAuthorLetter && showUpdateNotification && (
          <UpdateNotificationController onClose={() => setShowUpdateNotification(false)} />
        )}
 
        {/* 七夕特别活动推送（北京时间 2026-08-19，当天至多出现一次） */}
-       {!anniversaryHasPriority && !showDisclaimer && !showImportRecoveryPrompt && !showAuthorLetter && !showUpdateNotification && showQixiLaunchPopup && (
+       {nativeNoticesEnabled && !anniversaryHasPriority && !showDisclaimer && !showImportRecoveryPrompt && !showAuthorLetter && !showUpdateNotification && showQixiLaunchPopup && (
          <QixiLaunchPopup onClose={() => setShowQixiLaunchPopup(false)} />
        )}
 
        {/* 520 特别活动弹窗（2026-05-20 当天，一次性） */}
-       {!anniversaryHasPriority && !showDisclaimer && !showImportRecoveryPrompt && !showAuthorLetter && !showUpdateNotification && !showQixiLaunchPopup && showLike520Popup && (
+       {nativeNoticesEnabled && !anniversaryHasPriority && !showDisclaimer && !showImportRecoveryPrompt && !showAuthorLetter && !showUpdateNotification && !showQixiLaunchPopup && showLike520Popup && (
          <Like520Controller
            onClose={() => setShowLike520Popup(false)}
          />
