@@ -1,10 +1,12 @@
 import {BUILD_LABEL,BUILD_TIME_LABEL} from './buildInfo';
-export const MI_RELEASE_ID='mi-v23';
+export const MI_RELEASE_ID='km1.15';
 // A new deployment can share the product version, so receipt follows the actual build.
-export const MI_RELEASE_NOTICE_KEY='mi_release_seen_'+BUILD_LABEL+'_'+BUILD_TIME_LABEL;
-export const MI_RELEASE_TITLE='纪念手账 · 分角色珍藏重要日子';
+export const MI_RELEASE_NOTICE_KEY='mi_release_seen_'+MI_RELEASE_ID+'_'+BUILD_LABEL+'_'+BUILD_TIME_LABEL;
+export const MI_RELEASE_TITLE='km1.15 · 星梦集粉樱塔罗馆';
 export const MI_RELEASE_ITEMS=[
- ['时光契约新增纪念手账','每位角色独立查看，支持搜索、分类、编辑备注及每年纪念，原有记录保留。'],
- ['TA 也能主动记住','收紧已有的自主登记：只记重大节点，校验日期、去重并固定归属当前角色。'],
- ['共同补充回忆','你可以手动添加和编辑；角色能读取自己这一栏已有的纪念记录。'],
+ ['粉樱塔罗馆','改为低饱和裸粉与奶白米色的蕾丝珍珠界面；支持选择已保存的 API 预设。'],
+ ['解牌收藏','本次解读可收藏、查看历史、删除，也可以分享给指定角色继续聊天。'],
+ ['表情包识图','独立识图 API 开启后，新发送的表情包会生成画面、文字和 meme 含义描述。'],
+ ['上下文记忆','描述写回表情消息，后续聊天、重 roll 和刷新页面都可复用，不重复识图。'],
+ ['配置位置','设置 → 识图 API；关闭时保留原有表情包发送逻辑。'],
 ] as const;
