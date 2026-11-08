@@ -1,68 +1,121 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useOS } from '../context/OSContext';
 import { safeFetchJson } from '../utils/safeApi';
+import { DB } from '../utils/db';
+import { AppID } from '../types';
 
 type Tab = 'tarot' | 'stars' | 'dream';
+type ApiChoice = { id?: string; baseUrl?: string; apiKey?: string; model?: string };
+type TarotCard = { name: string; keyword: string; note: string; glyph: string };
+type SavedReading = { id: string; createdAt: string; question: string; cards: TarotCard[]; char?: string; text: string };
+
 const tabs: { id: Tab; label: string; sub: string; icon: string }[] = [
   { id: 'tarot', label: '塔罗', sub: 'Tarot', icon: '✦' },
   { id: 'stars', label: '星测', sub: 'Stellar', icon: '☾' },
   { id: 'dream', label: '解梦馆', sub: 'Dreams', icon: '◌' },
 ];
-const cards = [
-  ['愚者', '新的旅程', '相信第一步的直觉。'], ['星星', '微光指引', '你正在慢慢靠近想要的答案。'],
-  ['月亮', '未明之路', '先允许自己暂时看不清。'], ['太阳', '明亮时刻', '值得分享的好消息正在靠近。'],
-  ['恋人', '彼此选择', '关系需要诚实，也需要空间。'], ['世界', '圆满收束', '一段旧章节即将合上。'],
+
+const cards: TarotCard[] = [
+  { name: '愚者', keyword: '新的旅程', note: '相信第一步的直觉。', glyph: '✧' }, { name: '魔术师', keyword: '把想法变成现实', note: '你手里已经有足够的工具。', glyph: '☿' },
+  { name: '女祭司', keyword: '安静的知道', note: '先听见心里的声音，再决定。', glyph: '☾' }, { name: '皇后', keyword: '滋养与丰盛', note: '让关系和生活留一点柔软。', glyph: '❀' },
+  { name: '皇帝', keyword: '边界与秩序', note: '把重要的事情放回自己的掌控。', glyph: '♜' }, { name: '恋人', keyword: '彼此选择', note: '诚实、靠近，也保留空间。', glyph: '♡' },
+  { name: '战车', keyword: '向前', note: '方向明确时，犹豫会变轻。', glyph: '✦' }, { name: '力量', keyword: '温柔的勇气', note: '不必大声，也可以坚持。', glyph: '∞' },
+  { name: '隐者', keyword: '回到内心', note: '暂时独处，是为了找回自己的灯。', glyph: '⌁' }, { name: '命运之轮', keyword: '流动', note: '变化正在打开另一种可能。', glyph: '◉' },
+  { name: '正义', keyword: '如实看见', note: '平衡不是冷漠，而是清楚。', glyph: '⚖' }, { name: '倒吊人', keyword: '换个角度', note: '暂停并不等于后退。', glyph: '⋈' },
+  { name: '死神', keyword: '结束与转化', note: '旧的形式正在为新的空间让路。', glyph: '✣' }, { name: '节制', keyword: '调和', note: '慢慢把两种需要放在同一张桌上。', glyph: '♧' },
+  { name: '恶魔', keyword: '看见束缚', note: '你可以重新选择与什么相处。', glyph: '◇' }, { name: '高塔', keyword: '真相落地', note: '裂开的地方也可能带来空气。', glyph: '⚡' },
+  { name: '星星', keyword: '微光指引', note: '希望不必喧哗，也会持续发亮。', glyph: '☆' }, { name: '月亮', keyword: '未明之路', note: '先允许自己暂时看不清。', glyph: '☽' },
+  { name: '太阳', keyword: '明亮时刻', note: '值得分享的好消息正在靠近。', glyph: '☼' }, { name: '审判', keyword: '回应召唤', note: '你已经知道下一步要面对什么。', glyph: '♢' },
+  { name: '世界', keyword: '圆满收束', note: '一段旧章节即将合上。', glyph: '◎' },
 ];
 
+const deepRose = '#6f4c56';
+const cardBack = '/sully/tarot/tarot-card-back.png';
+const catAsset = '/sully/tarot/rose-cat.png';
+
+function readHistory(): SavedReading[] {
+  try { const raw = JSON.parse(localStorage.getItem('sullyos_mi_nuomi_tarot_history') || '[]'); return Array.isArray(raw) ? raw : []; } catch { return []; }
+}
+
+const hydrateCards = (raw: unknown): TarotCard[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    if (typeof item === 'string') return cards.find((card) => card.name === item) || cards[0];
+    const value = item as Partial<TarotCard>;
+    return cards.find((card) => card.name === value.name) || { name: value.name || '未知牌', keyword: value.keyword || '留给你自己的答案', note: value.note || '', glyph: value.glyph || '✦' };
+  }).slice(0, 3);
+};
+
 const AstrologyApp: React.FC = () => {
-  const { apiConfig, userProfile, closeApp, characters } = useOS();
+  const { apiConfig, apiPresets, userProfile, closeApp, characters, openApp, setActiveCharacterId } = useOS();
   const [tab, setTab] = useState<Tab>('tarot');
-  const [result, setResult] = useState<string>('');
+  const [result, setResult] = useState('');
   const [busy, setBusy] = useState(false);
   const [dream, setDream] = useState('');
-  const [card, setCard] = useState(cards[0]);
-  const [tarotApi, setTarotApi] = useState(() => { try { return JSON.parse(localStorage.getItem('nuomi_tarot_api') || '{}'); } catch { return {}; } });
-  const [showApi, setShowApi] = useState(false);
-  const [deck, setDeck] = useState<number[]>([]);
-  const [spread, setSpread] = useState<typeof cards>([]);
+  const [sign, setSign] = useState('天蝎座');
+  const [spread, setSpread] = useState<TarotCard[]>([]);
+  const [revealed, setRevealed] = useState<boolean[]>([]);
   const [question, setQuestion] = useState('');
   const [selectedChar, setSelectedChar] = useState('');
   const [followup, setFollowup] = useState('');
-  const [sign, setSign] = useState('天蝎座');
+  const [shareChar, setShareChar] = useState('');
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [showApi, setShowApi] = useState(false);
+  const [tarotApi, setTarotApi] = useState<ApiChoice>(() => { try { return JSON.parse(localStorage.getItem('sullyos_mi_nuomi_tarot_api') || '{}'); } catch { return {}; } });
+  const [savedReadings, setSavedReadings] = useState<SavedReading[]>(readHistory);
   const today = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' });
-  const accent = tab === 'tarot' ? '#e8b86d' : tab === 'stars' ? '#9cb8ff' : '#c9a8ff';
-  const title = useMemo(() => tabs.find(t => t.id === tab)!, [tab]);
+  const chosenCharacter = characters?.find((character) => character.id === selectedChar);
+
+  const drawThree = () => {
+    setSpread([...cards].sort(() => Math.random() - 0.5).slice(0, 3));
+    setRevealed([false, false, false]); setResult(''); setFollowup('');
+  };
+  const toggleCard = (index: number) => setRevealed((previous) => previous.map((value, current) => current === index ? !value : value));
 
   const ask = async (kind: Tab, input = '') => {
+    if (kind === 'tarot' && spread.length !== 3) return;
     setBusy(true); setResult('');
     const prompts: Record<Tab, string> = {
-      tarot: `你是${selectedChar || '温柔而克制的角色'}，保持你的人设和说话方式。为${userProfile?.name || '我'}解读三张塔罗牌：${spread.map((c,i)=>`${['过去','现在','未来'][i]}：${c[0]}（${c[1]}）`).join('；')}。问题是：${question || '我现在最需要知道什么？'}。像私聊一样自然地回应，给出具体建议，不要说自己是AI，不作绝对预言。${followup ? `追问：${followup}` : ''}`,
+      tarot: `你是${chosenCharacter?.name || '一位温柔而克制的角色'}，保持角色的人设、语气和世界观。不要提及AI、系统、提示词或“虚拟角色”。为${userProfile?.name || '我'}解读这组三张塔罗牌：${spread.map((card, index) => `${positionsLabel(index)}：${card.name}（${card.keyword}）`).join('；')}。我的问题是：${question || '我现在最需要知道什么？'}。请像私聊一样自然回答，结合牌面给出具体、温和、有边界的观察和建议，不作绝对预言，不替我做决定。${followup ? `这是我的追问：${followup}` : ''}`,
       stars: `你是温柔的星象记录者。请为${sign}写一段${today}的今日运势，分为关系、行动、提醒三点，避免绝对化预测。`,
       dream: `你是谨慎的梦境记录者。分析下面的梦，只谈可能的情绪和象征，不作医学或预言判断：${input}`,
     };
     try {
       const activeApi = kind === 'tarot' && tarotApi.baseUrl ? tarotApi : apiConfig;
       if (!activeApi?.baseUrl || !activeApi?.apiKey || !activeApi?.model) throw new Error('未配置 API');
-      const data = await safeFetchJson(`${activeApi.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiConfig.apiKey}` },
-        body: JSON.stringify({ model: activeApi.model, messages: [{ role: 'user', content: prompts[kind] }], temperature: .8, max_tokens: 700 }),
-      });
+      const data = await safeFetchJson(`${activeApi.baseUrl.replace(/\/+$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${activeApi.apiKey}` }, body: JSON.stringify({ model: activeApi.model, messages: [{ role: 'user', content: prompts[kind] }], temperature: .8, max_tokens: 900 }) });
       setResult(data?.choices?.[0]?.message?.content?.trim() || '暂时没有得到回应。');
-    } catch (e: any) { setResult(`暂时无法连接解读 API：${e?.message || '请检查设置'}`); }
-    finally { setBusy(false); }
+    } catch (error: any) { setResult(`暂时无法连接解读 API：${error?.message || '请检查设置'}`); } finally { setBusy(false); }
   };
 
-  return <div className="h-full w-full overflow-auto text-white" style={{ background: 'radial-gradient(circle at 50% 0%, #30234b 0%, #11121e 54%, #090a12 100%)' }}>
-    <div className="mx-auto min-h-full max-w-2xl px-5 py-5">
-      <header className="flex items-start justify-between"><div><div className="text-[10px] tracking-[.35em] uppercase text-white/45">A quiet place for signs</div><h1 className="mt-2 text-3xl font-semibold tracking-wide">星梦集</h1><p className="mt-1 text-sm text-white/55">把今天交给一点想象</p></div><button onClick={closeApp} className="rounded-full bg-white/10 px-3 py-1 text-xl text-white/65">×</button></header>
-      <div className="mt-7 grid grid-cols-3 gap-2 rounded-2xl bg-white/8 p-1">{tabs.map(t => <button key={t.id} onClick={() => { setTab(t.id); setResult(''); }} className="rounded-xl px-2 py-3 text-center transition" style={tab === t.id ? { background: `${accent}22`, color: accent } : { color: '#ffffff88' }}><div className="text-xl">{t.icon}</div><div className="mt-1 text-sm">{t.label}</div><div className="text-[9px] uppercase tracking-widest opacity-60">{t.sub}</div></button>)}</div>
-      {tab === 'tarot' && <section className="mt-6 rounded-3xl border border-white/15 bg-white/8 p-5 shadow-2xl backdrop-blur-xl"><div className="flex items-start justify-between"><div><div className="text-[10px] tracking-[.35em] text-[#f4d49b]/70">THREE CARD SPREAD</div><h2 className="mt-2 text-2xl tracking-widest text-[#f4d49b]">命运三牌阵</h2></div><button onClick={() => setShowApi(true)} className="rounded-full border border-white/15 px-3 py-1 text-xs text-white/55">API 设置</button></div><p className="mt-2 text-sm text-white/55">先洗牌，再从牌阵中亲自选择三张</p><input value={question} onChange={e => setQuestion(e.target.value)} placeholder="写下你的问题，例如：我们之间接下来会怎样？" className="mt-5 w-full rounded-2xl border border-white/15 bg-black/20 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35" /><div className="mt-5 grid grid-cols-3 gap-3">{Array.from({ length: 9 }, (_, i) => <button key={i} disabled={!deck.length || spread.length >= 3 || spread.some((_, j) => deck[j] === i)} onClick={() => { const c = cards[Math.floor(Math.random() * cards.length)]; setSpread(s => [...s, c]); setDeck(d => d.filter(x => x !== i)); }} className={`mx-auto flex h-36 w-full max-w-[110px] flex-col items-center justify-center rounded-xl border transition ${deck.includes(i) && spread.length < 3 ? 'border-[#f4d49b]/50 bg-gradient-to-br from-[#27304e] to-[#15162d] hover:-translate-y-1' : 'border-white/10 bg-black/15 opacity-50'}`}><span className="text-3xl text-[#f4d49b]">{deck.includes(i) && spread.length < 3 ? '✦' : '·'}</span><span className="mt-2 text-[10px] text-white/45">{deck.includes(i) && spread.length < 3 ? '选择此牌' : '已取牌'}</span></button>)}</div><div className="mt-4 grid grid-cols-3 gap-2">{(['过去','现在','未来'] as const).map((pos,i) => <div key={pos} className="rounded-xl border border-white/10 bg-black/15 p-2 text-center text-xs text-white/60">{pos}<div className="mt-2 text-[#f4d49b]">{spread[i]?.[0] || '—'}</div></div>)}</div><button onClick={() => { setSpread([]); setDeck(Array.from({ length: 9 }, (_, i) => i)); setResult(''); }} className="mt-5 w-full rounded-full border border-[#f4d49b]/50 py-3 text-sm text-[#f4d49b]">{deck.length ? '开始洗牌' : '重新洗牌'}</button>{spread.length === 3 && <div className="mt-5 border-t border-white/10 pt-5"><div className="text-sm text-white/60">选择一位角色来解读</div><select value={selectedChar} onChange={e => setSelectedChar(e.target.value)} className="mt-3 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-3 text-white outline-none"><option value="" className="bg-[#171626]">选择角色</option>{(characters || []).map(c => <option key={c.id} value={c.name} className="bg-[#171626]">{c.name}</option>)}</select><button disabled={busy || !selectedChar} onClick={() => ask('tarot')} className="mt-3 w-full rounded-full py-3 text-sm text-black disabled:opacity-40" style={{ background: accent }}>{busy ? '解读中…' : '请角色开始解读'}</button>{result && <><textarea value={followup} onChange={e => setFollowup(e.target.value)} placeholder="还想追问什么？" className="mt-4 h-20 w-full rounded-xl border border-white/15 bg-black/20 p-3 text-sm text-white outline-none placeholder:text-white/35" /><button disabled={busy || !followup.trim()} onClick={() => ask('tarot')} className="mt-2 w-full rounded-full border border-white/20 py-2 text-sm text-white/75 disabled:opacity-40">继续追问</button></>}</div>}</section>}
-      {showApi && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-5"><div className="w-full max-w-md rounded-3xl border border-white/20 bg-[#211d32]/95 p-5 shadow-2xl backdrop-blur-2xl"><div className="flex justify-between"><h3 className="text-lg text-[#f4d49b]">塔罗 API 设置</h3><button onClick={() => setShowApi(false)} className="text-xl text-white/60">×</button></div><p className="mt-2 text-xs text-white/45">独立于查手机 API，仅用于角色塔罗解读。</p>{(['baseUrl','apiKey','model'] as const).map(k => <input key={k} type={k === 'apiKey' ? 'password' : 'text'} value={tarotApi[k] || ''} onChange={e => setTarotApi((x: any) => ({ ...x, [k]: e.target.value }))} placeholder={k === 'baseUrl' ? 'API 地址' : k === 'apiKey' ? 'API Key' : '模型名称'} className="mt-3 w-full rounded-xl border border-white/15 bg-black/20 px-3 py-3 text-sm text-white outline-none placeholder:text-white/35" />)}<button onClick={() => { localStorage.setItem('nuomi_tarot_api', JSON.stringify(tarotApi)); setShowApi(false); }} className="mt-4 w-full rounded-full bg-[#e8b86d] py-3 text-sm text-black">保存设置</button></div></div>}
-      {tab === 'stars' && <section className="mt-6 rounded-3xl border border-white/15 bg-white/8 p-6"><div className="text-center"><div className="text-6xl">♏</div><select value={sign} onChange={e => setSign(e.target.value)} className="mt-3 rounded-full border border-white/15 bg-white/10 px-5 py-2 text-center text-white outline-none">{['白羊座','金牛座','双子座','巨蟹座','狮子座','处女座','天秤座','天蝎座','射手座','摩羯座','水瓶座','双鱼座'].map(s => <option className="bg-[#171626]" key={s}>{s}</option>)}</select><p className="mt-4 text-sm text-white/55">{today} · 今日运势</p><button disabled={busy} onClick={() => ask('stars')} className="mt-5 rounded-full px-6 py-2 text-sm text-black" style={{ background: accent }}>{busy ? '观测中…' : '抽取今日运势'}</button></div></section>}
-      {tab === 'dream' && <section className="mt-6 rounded-3xl border border-white/15 bg-white/8 p-6"><h2 className="text-xl">把梦留在这里</h2><p className="mt-1 text-sm text-white/50">只记录，不替你下结论。</p><textarea value={dream} onChange={e => setDream(e.target.value)} placeholder="昨晚梦见了什么？" className="mt-5 h-36 w-full resize-none rounded-2xl border border-white/15 bg-black/20 p-4 text-sm text-white outline-none placeholder:text-white/30" /><button disabled={busy || !dream.trim()} onClick={() => ask('dream', dream)} className="mt-4 rounded-full px-6 py-2 text-sm text-black disabled:opacity-40" style={{ background: accent }}>{busy ? '整理中…' : '请角色看看'}</button></section>}
-      {result && <div className="mt-5 whitespace-pre-wrap rounded-2xl border border-white/15 bg-black/20 p-5 text-[15px] leading-7 text-white/85">{result}</div>}
-      <p className="mt-8 pb-5 text-center text-[11px] text-white/30">解读是陪伴和灵感，不是确定的命运。</p>
+  const saveReading = () => {
+    if (!result || spread.length !== 3) return;
+    const item: SavedReading = { id: `${Date.now()}`, createdAt: new Date().toLocaleString('zh-CN'), question, cards: spread, char: selectedChar, text: result };
+    const next = [item, ...savedReadings].slice(0, 30); setSavedReadings(next); localStorage.setItem('sullyos_mi_nuomi_tarot_history', JSON.stringify(next)); setHistoryOpen(true);
+  };
+  const deleteReading = (id: string) => { const next = savedReadings.filter((item) => item.id !== id); setSavedReadings(next); localStorage.setItem('sullyos_mi_nuomi_tarot_history', JSON.stringify(next)); };
+  const openReading = (item: SavedReading) => { setQuestion(item.question || ''); setSelectedChar(item.char || ''); setSpread(hydrateCards(item.cards)); setRevealed([true, true, true]); setResult(item.text || ''); setTab('tarot'); setHistoryOpen(false); };
+  const shareReading = async () => {
+    if (!result || !shareChar) return;
+    await DB.saveMessage({ charId: shareChar, role: 'user', type: 'text', content: `【星梦集·塔罗解读】\n问题：${question || '今日抽牌'}\n牌面：${spread.map((card, index) => `${positionsLabel(index)}·${card.name}`).join(' / ')}\n\n${result}` });
+    setActiveCharacterId(shareChar); openApp(AppID.Chat);
+  };
+  const renderReading = (text: string) => text.split('\n').map((line, index) => { const heading = line.match(/^#{2,6}\s*(.*)$/); if (heading) return <div key={index} className="mb-2 mt-5 text-lg font-semibold tracking-wide text-[#9b6871]">{heading[1]}</div>; if (/^\s*[-*>]/.test(line)) return <div key={index} className="my-1 pl-4 text-[#735961]">• {line.replace(/^\s*[-*>]\s*/, '')}</div>; return <div key={index} className="min-h-[1.4em]">{line || '\u00a0'}</div>; });
+
+  return <div className="h-full w-full overflow-auto text-[#6f4c56]" style={{ background: 'radial-gradient(circle at 18% 0%, #f7e0e3 0, transparent 35%), radial-gradient(circle at 90% 16%, #f4e8dd 0, transparent 34%), #fffaf4' }}>
+    <div className="mx-auto min-h-full max-w-3xl px-4 py-4 sm:px-6 sm:py-6">
+      <header className="relative overflow-hidden rounded-[30px] border border-[#e5c7c5] bg-[#fffaf3]/85 px-5 py-4 shadow-[0_18px_45px_rgba(173,116,124,.14)] backdrop-blur-xl"><div className="pointer-events-none absolute inset-x-0 top-0 h-2 opacity-70" style={{ backgroundImage: 'radial-gradient(circle, #e3aeb7 1px, transparent 1.5px)', backgroundSize: '12px 6px' }} /><div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><div className="h-16 w-16 overflow-hidden rounded-full border-2 border-[#e6c0c2] bg-[#f6e1e2] shadow-inner"><img src={catAsset} alt="粉樱猫咪" className="h-full w-full object-contain" /></div><div><div className="text-[10px] uppercase tracking-[.34em] text-[#b4878e]">A quiet place for signs</div><h1 className="mt-1 text-3xl font-semibold tracking-wide text-[#6f4c56]">星梦集</h1><p className="mt-1 text-sm text-[#9c7b82]">把今天交给一点想象</p></div></div><div className="flex items-center gap-2"><button onClick={() => setHistoryOpen(true)} className="rounded-full border border-[#e2c2c2] bg-white/70 px-3 py-2 text-xs text-[#a8737c]">历史收藏{savedReadings.length ? ` · ${savedReadings.length}` : ''}</button><button onClick={() => setShowApi(true)} className="rounded-full border border-[#dfb9bd] bg-[#f6e6e4] px-3 py-2 text-xs text-[#9d6872] shadow-sm">API 设置</button><button onClick={closeApp} className="rounded-full border border-[#e5c9c2] bg-white/65 px-3 py-1 text-xl text-[#a87982]">×</button></div></div></header>
+      <nav className="mt-4 grid grid-cols-3 gap-1 rounded-[26px] border border-[#e6c9c5] bg-[#fffaf5]/80 p-1.5 shadow-[0_10px_28px_rgba(173,113,122,.11)] backdrop-blur-xl">{tabs.map((item) => <button key={item.id} onClick={() => { setTab(item.id); setResult(''); }} className="rounded-[20px] px-2 py-3 text-center transition" style={tab === item.id ? { background: '#f3e1d9', color: deepRose, boxShadow: 'inset 0 0 0 1px rgba(213,166,163,.45)' } : { color: '#b28e93' }}><div className="text-xl">{item.icon}</div><div className="mt-1 text-sm">{item.label}</div><div className="text-[9px] uppercase tracking-widest opacity-60">{item.sub}</div></button>)}</nav>
+      {tab === 'tarot' && <section className="mt-5 overflow-hidden rounded-[34px] border border-[#e6c4c2] bg-[#fffaf6]/78 p-4 shadow-[0_18px_55px_rgba(173,116,124,.13)] backdrop-blur-xl sm:p-6"><div className="flex items-end justify-between gap-3"><div><div className="text-[10px] uppercase tracking-[.34em] text-[#b4878e]">Three card spread</div><h2 className="mt-1 text-2xl font-semibold text-[#79525d]">今日的三重镜</h2><p className="mt-1 text-sm text-[#a17d84]">让问题落在三张牌上，再决定要把它交给谁解读。</p></div><div className="hidden text-right text-xs text-[#b28e93] sm:block">01 抽牌 · 02 翻牌 · 03 解读</div></div><div className="mt-5 rounded-[26px] border border-[#edd3cb] bg-[#f8ece6]/65 p-4"><label className="text-xs tracking-[.16em] text-[#aa7a83]">心里正在想什么？</label><textarea value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="例如：我们之间的关系接下来会如何发展？" className="mt-2 h-20 w-full resize-none rounded-2xl border border-[#e1c6c3] bg-[#fffaf6]/85 p-3 text-sm text-[#6f4c56] outline-none placeholder:text-[#b99da1]" /><div className="mt-3 flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-[#b18b91]">不写问题也可以，让牌面自己开口。</span><button onClick={drawThree} className="rounded-full bg-[#c9919a] px-5 py-2.5 text-sm text-white shadow-[0_8px_18px_rgba(183,125,133,.22)]">{spread.length ? '重新抽三张' : '抽三张牌'}</button></div></div>{spread.length > 0 && <><div className="mt-5 grid grid-cols-3 gap-2 sm:gap-4">{spread.map((card, index) => <button key={`${card.name}-${index}`} onClick={() => toggleCard(index)} className="group relative min-w-0 text-left"><div className="relative aspect-[2/3] overflow-hidden rounded-[20px] border-2 border-[#e3c0ad] bg-[#f3d8d4] shadow-[0_10px_22px_rgba(142,101,104,.16)] transition group-hover:-translate-y-1" style={{ backgroundImage: revealed[index] ? undefined : `url(${cardBack})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>{revealed[index] ? <div className="flex h-full flex-col items-center justify-center bg-[linear-gradient(145deg,#fff8ed,#f2d7d5)] px-2 text-center"><div className="text-3xl text-[#b88465]">{card.glyph}</div><div className="mt-3 text-base font-semibold text-[#7a4f58]">{card.name}</div><div className="mt-1 text-[11px] text-[#b37b84]">{card.keyword}</div><div className="mt-4 border-t border-[#dfc2b7] pt-2 text-[10px] leading-4 text-[#98777a]">{card.note}</div></div> : <div className="absolute inset-0 flex items-end justify-center bg-black/5 pb-3 text-xs tracking-[.18em] text-white drop-shadow">点击翻牌</div>}</div><div className="mt-2 text-center text-xs text-[#a97d84]">{['过去', '现在', '未来'][index]}</div></button>)}</div><div className="mt-5 grid gap-3 rounded-[26px] border border-[#e7ccc6] bg-[#fffaf7]/80 p-4 sm:grid-cols-[1fr_auto] sm:items-end"><div><label className="text-xs tracking-[.14em] text-[#a87982]">选择解读者</label><select value={selectedChar} onChange={(event) => setSelectedChar(event.target.value)} className="mt-2 w-full rounded-2xl border border-[#dfc3bf] bg-white/80 px-3 py-3 text-sm text-[#6f4c56] outline-none"><option value="">所有未选角色 · 使用通用语气</option>{(characters || []).map((character) => <option key={character.id} value={character.id}>{character.name}</option>)}</select></div><button disabled={busy || spread.length !== 3} onClick={() => ask('tarot')} className="rounded-full bg-[#b77d85] px-6 py-3 text-sm text-white shadow-[0_8px_18px_rgba(183,125,133,.22)] disabled:opacity-40">{busy ? '正在解读…' : '请角色解读'}</button></div></>}{result && <div className="mt-5 rounded-[26px] border border-[#e2c1bf] bg-[#fffaf8]/92 p-5 text-[15px] leading-7 text-[#59454a] shadow-[0_12px_30px_rgba(173,113,122,.12)]"><div className="mb-4 flex items-center justify-between border-b border-[#edd8d2] pb-3"><div><div className="text-[10px] uppercase tracking-[.28em] text-[#b4878e]">reading notes</div><div className="mt-1 font-semibold text-[#875d67]">{chosenCharacter?.name || '星梦集'} 的解读</div></div><span className="text-xs text-[#b18b91]">{spread.map((card) => card.name).join(' · ')}</span></div>{renderReading(result)}<div className="mt-5 border-t border-[#ecd9d3] pt-4"><textarea value={followup} onChange={(event) => setFollowup(event.target.value)} placeholder="想追问什么？可以继续问这一组三张牌。" className="h-16 w-full resize-none rounded-2xl border border-[#e1c6c3] bg-white/75 p-3 text-sm text-[#6f4c56] outline-none placeholder:text-[#b99da1]" /><div className="mt-3 flex flex-wrap gap-2"><button disabled={busy || !followup.trim()} onClick={() => ask('tarot')} className="rounded-full bg-[#e8c7c2] px-4 py-2 text-sm text-[#6d4d53] disabled:opacity-40">继续追问</button><button onClick={saveReading} className="rounded-full border border-[#d8b2b3] bg-[#fff2ec] px-4 py-2 text-sm text-[#855d66]">收藏本次解牌</button><select value={shareChar} onChange={(event) => setShareChar(event.target.value)} className="rounded-full border border-[#dfc2bd] bg-white px-3 py-2 text-sm text-[#6d4d53]"><option value="">选择角色分享</option>{(characters || []).map((character) => <option key={character.id} value={character.id}>{character.name}</option>)}</select><button disabled={!shareChar} onClick={shareReading} className="rounded-full bg-[#a87982] px-4 py-2 text-sm text-white disabled:opacity-40">分享到聊天</button></div></div></div>}{!spread.length && <div className="mt-6 flex min-h-[260px] items-center justify-center rounded-[28px] border border-dashed border-[#e5c9c2] bg-[#fff9f2]/50 p-8 text-center"><div><img src={catAsset} alt="粉樱猫咪" className="mx-auto h-28 object-contain" /><p className="mt-2 text-sm text-[#a17d84]">先写下一个问题，再抽三张牌。</p><p className="mt-1 text-xs text-[#c09ea0]">每次抽牌都可以选择收藏，也可以随时和角色讨论。</p></div></div>}</section>}
+      {tab === 'stars' && <section className="mt-5 rounded-[30px] border border-[#e6c4c2] bg-[#fffaf6]/80 p-6 text-center shadow-[0_18px_55px_rgba(173,116,124,.13)]"><div className="text-6xl text-[#b77d85]">♏</div><select value={sign} onChange={(event) => setSign(event.target.value)} className="mt-3 rounded-full border border-[#ead0cb] bg-white/80 px-5 py-2 text-center text-[#6f4c56] outline-none">{['白羊座','金牛座','双子座','巨蟹座','狮子座','处女座','天秤座','天蝎座','射手座','摩羯座','水瓶座','双鱼座'].map((item) => <option key={item}>{item}</option>)}</select><p className="mt-4 text-sm text-[#9b7d82]">{today} · 今日运势</p><button disabled={busy} onClick={() => ask('stars')} className="mt-5 rounded-full bg-[#c9919a] px-6 py-2 text-sm text-white">{busy ? '观测中…' : '抽取今日运势'}</button>{result && <div className="mt-5 rounded-2xl bg-white/80 p-5 text-left text-[15px] leading-7 text-[#59454a]">{renderReading(result)}</div>}</section>}
+      {tab === 'dream' && <section className="mt-5 rounded-[30px] border border-[#e6c4c2] bg-[#fffaf6]/80 p-6 shadow-[0_18px_55px_rgba(173,116,124,.13)]"><h2 className="text-xl text-[#79525d]">把梦留在这里</h2><p className="mt-1 text-sm text-[#9b7d82]">只记录，不替你下结论。</p><textarea value={dream} onChange={(event) => setDream(event.target.value)} placeholder="昨晚梦见了什么？" className="mt-5 h-36 w-full resize-none rounded-2xl border border-[#ead0cb] bg-white/75 p-4 text-sm text-[#6f4c56] outline-none placeholder:text-[#b99da1]" /><button disabled={busy || !dream.trim()} onClick={() => ask('dream', dream)} className="mt-4 rounded-full bg-[#c9919a] px-6 py-2 text-sm text-white disabled:opacity-40">{busy ? '整理中…' : '请角色看看'}</button>{result && <div className="mt-5 rounded-2xl bg-white/80 p-5 text-[15px] leading-7 text-[#59454a]">{renderReading(result)}</div>}</section>}
+      {historyOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#6b4e56]/25 p-4 backdrop-blur-sm"><div className="max-h-[82vh] w-full max-w-xl overflow-auto rounded-[30px] border border-[#e2c0c0] bg-[#fffaf6] p-5 shadow-[0_24px_80px_rgba(100,60,65,.2)]"><div className="flex items-center justify-between"><div><div className="text-[10px] uppercase tracking-[.28em] text-[#b4878e]">saved readings</div><h3 className="mt-1 text-xl font-semibold text-[#79525d]">历史收藏</h3></div><button onClick={() => setHistoryOpen(false)} className="text-xl text-[#a87982]">×</button></div>{savedReadings.length === 0 ? <div className="py-14 text-center text-sm text-[#b18b91]">还没有收藏的解牌。</div> : <div className="mt-4 space-y-2">{savedReadings.map((item) => <div key={item.id} className="flex items-center gap-3 rounded-2xl border border-[#eed8d1] bg-white/75 p-3"><button onClick={() => openReading(item)} className="min-w-0 flex-1 text-left"><div className="truncate text-sm text-[#76535d]">{item.question || '今日抽牌'} · {hydrateCards(item.cards).map((card) => card.name).join(' / ')}</div><div className="mt-1 text-xs text-[#b18b91]">{item.createdAt}</div></button><button onClick={() => deleteReading(item.id)} className="text-xs text-[#b1787f]">删除</button></div>)}</div>}<button onClick={() => setHistoryOpen(false)} className="mt-5 w-full rounded-full bg-[#f1ded8] py-3 text-sm text-[#815a63]">返回星梦集</button></div></div>}
+      {showApi && <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#6b4e56]/25 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-[30px] border border-[#e2c0c0] bg-[#fffaf6] p-6 shadow-[0_24px_80px_rgba(100,60,65,.2)]"><div className="flex items-center justify-between"><div><div className="text-[10px] uppercase tracking-[.28em] text-[#b4878e]">星梦集 · TAROT</div><h3 className="mt-1 text-xl font-semibold text-[#79525d]">塔罗 API 设置</h3></div><button onClick={() => setShowApi(false)} className="text-xl text-[#a87982]">×</button></div><p className="mt-2 text-sm text-[#8c7478]">这里直接应用聊天设置里已经保存的 API 预设。</p><select value={tarotApi.id || (tarotApi.baseUrl ? 'custom' : '')} onChange={(event) => { const preset = apiPresets.find((item) => item.id === event.target.value); if (preset) setTarotApi({ id: preset.id, ...preset.config }); else if (!event.target.value) setTarotApi({}); }} className="mt-5 w-full rounded-2xl border border-[#e2c9c3] bg-white px-4 py-3 text-[#6d4d53] outline-none"><option value="">跟随聊天默认 · {apiConfig?.model || '未配置'}</option>{apiPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name} · {preset.config.model}</option>)}</select><div className="mt-3 rounded-2xl bg-[#f8ece6] px-3 py-2 text-xs leading-5 text-[#9c7b82]">应用后只影响塔罗解读；聊天、日记和其他功能继续使用各自设置。</div><button onClick={() => { localStorage.setItem('sullyos_mi_nuomi_tarot_api', JSON.stringify(tarotApi)); setShowApi(false); }} className="mt-4 w-full rounded-full bg-[#c9939a] py-3 text-sm text-white">应用此预设</button></div></div>}
+      <p className="mt-6 pb-5 text-center text-[11px] text-[#c5a6a7]">解读是陪伴和灵感，不是确定的命运。</p>
     </div>
   </div>;
 };
+
+function positionsLabel(index: number) { return ['过去', '现在', '未来'][index] || '牌面'; }
+
 export default AstrologyApp;
