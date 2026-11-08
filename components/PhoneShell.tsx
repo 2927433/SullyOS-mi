@@ -1,5 +1,3 @@
-import HealthShortcutReceiver from './lifeRecord/HealthShortcutReceiver';
-const SoloDiaryRuntime = React.lazy(() => import('./journal/SoloDiaryRuntime').catch(error => { console.warn('自动日记模块加载失败，下次打开重试', error); return {default: () => null}; }));
 import FirstUseGuide from './FirstUseGuide';
 import FeedbackInvitation from './FeedbackInvitation';
 import BeautyRepoInvitation from './share/BeautyRepoInvitation';
@@ -122,7 +120,6 @@ import NavigationBall from './os/NavigationBall';
 import PersonaSimIndicator from './os/PersonaSimIndicator';
 import DreamSimIndicator from './os/DreamSimIndicator';
 import ErrorDialog from './os/ErrorDialog';
-import BootSequence from './os/BootSequence';
 import { setAppPayloadWarmer, shouldUseIdleAppPreload } from './os/appPreload';
 import { isBrowserBackGuardState, makeBrowserBackGuardState } from '../utils/browserBackGuard';
 
@@ -470,9 +467,9 @@ const PhoneShell: React.FC = () => {
     document.documentElement.classList.toggle('sully-statusbar-compact', statusBarMode === 'compact');
   }, [statusBarMode]);
 
-  // 冷启动「世界入场」是否已结束。结束前由 BootSequence 接管整屏（同时取代旧的黑屏 spinner）。
-  const [bootDone, setBootDone] = useState(false);
-  const bootAnimationEnabled = theme.bootAnimationEnabled !== false;
+  // 糯米机直接进入页面，不播放开场动画；保留 bootDone 作为旧启动状态的兼容门闩。
+  const [bootDone, setBootDone] = useState(true);
+  const bootAnimationEnabled = false;
   useEffect(() => {
     // 本次启动一旦选择跳过，就记为已经完成；用户稍后重新打开开关时不在桌面中途补播。
     if (!bootAnimationEnabled) setBootDone(true);
@@ -824,11 +821,7 @@ const PhoneShell: React.FC = () => {
   }, [theme.wallpaper]);
 
   // 冷启动：先放「世界入场」cinematic（数据没就绪时它持续呼吸等待，绝不出现 spinner）。
-  // BootSequence 在「数据就绪 + 停留够时长」后推进退场，再交还控制权给下方的锁屏/桌面。
-  if (!bootDone && bootAnimationEnabled) {
-    return <BootSequence dataReady={isDataLoaded} wallpaper={theme.wallpaper} style={theme.bootAnimationStyle} onDone={() => setBootDone(true)} />;
-  }
-
+  // 已移除开场动画，直接继续渲染锁屏或桌面。
   // 兜底：理论上 bootDone 时数据已就绪；万一未就绪（极端慢）退化为最简静态深色屏，不闪 spinner。
   if (!isDataLoaded) {
     return <div className="w-full h-full" style={{ background: '#05060f' }} />;
@@ -1105,8 +1098,6 @@ const PhoneShell: React.FC = () => {
          />
        )}
 
-       <HealthShortcutReceiver />
-       {isDataLoaded && !isLocked && <Suspense fallback={null}><SoloDiaryRuntime /></Suspense>}
        {/* 见面 · 剧情首映：解锁后一次性出现 */}
        {!anniversaryHasPriority && !showDisclaimer && !showImportRecoveryPrompt && !showAuthorLetter && showUpdateNotification && (
          <UpdateNotificationController onClose={() => setShowUpdateNotification(false)} />
