@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useOS } from '../context/OSContext';
-import { safeFetchJson } from '../utils/safeApi';
+import { extractContent, safeFetchJson } from '../utils/safeApi';
 import { DB } from '../utils/db';
 import { AppID } from '../types';
 
 type Tab = 'tarot' | 'stars' | 'dream';
-type ApiChoice = { id?: string; baseUrl?: string; apiKey?: string; model?: string };
+type ApiChoice = { id?: string; baseUrl?: string; apiKey?: string; model?: string; apiUrl?: string; endpoint?: string; provider?: string; apiType?: string };
 type TarotCard = { name: string; keyword: string; note: string; glyph: string };
 type SavedReading = { id: string; createdAt: string; question: string; cards: TarotCard[]; char?: string; text: string };
 type StarReading = { id: string; createdAt: string; kind: 'daily' | 'synastry'; title: string; text: string; userBirthDate: string; charName?: string; charBirthDate?: string };
@@ -70,6 +70,7 @@ const AstrologyApp: React.FC = () => {
   const [result, setResult] = useState('');
   const [busy, setBusy] = useState(false);
   const [dream, setDream] = useState('');
+  const [dreamChar, setDreamChar] = useState('');
   const [deckSlots, setDeckSlots] = useState(() => Array.from({ length: 12 }, (_, index) => index));
   const [pickedSlots, setPickedSlots] = useState<number[]>([]);
   const [spread, setSpread] = useState<TarotCard[]>([]);
@@ -93,6 +94,7 @@ const AstrologyApp: React.FC = () => {
   const [charBirthDates, setCharBirthDates] = useState<Record<string, string>>(() => readJson<Record<string, string>>(CHAR_BIRTH_DATES, {}));
   const today = new Date().toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' });
   const chosenCharacter = characters?.find((character) => character.id === selectedChar);
+  const dreamCharacter = characters?.find((character) => character.id === dreamChar);
   const synastryCharacter = characters?.find((character) => character.id === synastryChar);
   const synastryContext = synastryCharacter ? [synastryCharacter.description, synastryCharacter.worldview, synastryCharacter.systemPrompt].filter(Boolean).join('\n').slice(0, 5000) : '';
   const userZodiac = useMemo(() => zodiacForDate(birthDate), [birthDate]);
@@ -113,19 +115,48 @@ const AstrologyApp: React.FC = () => {
     setPickedSlots((value) => [...value, slot]); setSpread((value) => [...value, picked]); setResult('');
   };
 
-  const getApi = (kind: 'tarot' | 'stars' | 'dream'): ApiChoice => kind === 'tarot' && tarotApi.baseUrl ? tarotApi : apiConfig;
+  const getApi = (kind: 'tarot' | 'stars' | 'dream'): ApiChoice => {
+    const selected = kind === 'tarot' && tarotApi.baseUrl ? tarotApi : apiConfig;
+    if (selected?.id) {
+      const preset = apiPresets.find((item) => item.id === selected.id);
+      if (preset) return { ...preset.config, ...selected };
+    }
+    return selected;
+  };
+  const getApiEndpoint = (api: ApiChoice) => {
+    const raw = String(api.endpoint || api.apiUrl || api.baseUrl || '').trim().replace(/\/+$/, '');
+      const isNativeGemini = /generativelanguage\.googleapis\.com/i.test(raw) && !/\/openai(?:\/|$)/i.test(raw) && !/chat\/completions/i.test(raw);
+    if (isNativeGemini) {
+      const model = encodeURIComponent(String(api.model || '').replace(/^models\//, ''));
+      const root = raw.replace(/\/v1(?:beta|alpha)?(?:\/models\/[^/]+(?::generateContent)?)?$/i, '');
+      return { url: `${root}/v1beta/models/${model}:generateContent`, nativeGemini: true };
+    }
+    if (/\/chat\/completions$/i.test(raw)) return { url: raw, nativeGemini: false };
+    return { url: `${raw}/chat/completions`, nativeGemini: false };
+  };
   const callApi = async (prompt: string, kind: 'tarot' | 'stars' | 'dream') => {
     const activeApi = getApi(kind);
-    if (!activeApi?.baseUrl || !activeApi?.apiKey || !activeApi?.model) throw new Error('未配置 API');
-    const data = await safeFetchJson(`${activeApi.baseUrl.replace(/\/+$/, '')}/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${activeApi.apiKey}` }, body: JSON.stringify({ model: activeApi.model, messages: [{ role: 'user', content: prompt }], temperature: .8, max_tokens: 1100 }) });
-    return data?.choices?.[0]?.message?.content?.trim() || '暂时没有得到回应。';
+    const { url, nativeGemini } = getApiEndpoint(activeApi);
+    if (!url || !activeApi?.apiKey || !activeApi?.model) throw new Error('未配置 API');
+    const data = await safeFetchJson(url, {
+      method: 'POST',
+      headers: nativeGemini
+        ? { 'Content-Type': 'application/json', 'x-goog-api-key': activeApi.apiKey }
+        : { 'Content-Type': 'application/json', Authorization: `Bearer ${activeApi.apiKey}` },
+      body: JSON.stringify(nativeGemini
+        ? { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: .8, maxOutputTokens: 1100 } }
+        : { model: activeApi.model, messages: [{ role: 'user', content: prompt }], temperature: .8, max_tokens: 1100, stream: false }),
+    });
+    const text = extractContent(data) || data?.candidates?.[0]?.content?.parts?.map((part: any) => part?.text || '').join('') || data?.text || '';
+    return text.trim() || '暂时没有得到回应。';
   };
   const ask = async (kind: 'tarot' | 'dream', input = '') => {
     if (kind === 'tarot' && spread.length !== 3) return;
     setBusy(true); setResult('');
+    const dreamPersona = dreamCharacter ? `你是角色“${dreamCharacter.name}”。保持其原有人设、关系边界、语气和世界观，不要变成旁白、心理医生或通用客服。角色设定如下：${[dreamCharacter.description, dreamCharacter.worldview, dreamCharacter.systemPrompt].filter(Boolean).join('\n').slice(0, 6000)}` : '你是一位熟悉我的角色朋友，保持自然、克制、像私聊一样说话。';
     const prompt = kind === 'tarot'
       ? `你是${chosenCharacter?.name || '一位温柔而克制的角色'}，保持角色的人设、语气和世界观。不要提及AI、系统、提示词或“虚拟角色”。为${userProfile?.name || '我'}解读这组三张塔罗牌：${spread.map((card, index) => `${positionsLabel(index)}：${card.name}（${card.keyword}）`).join('；')}。我的问题是：${question || '我现在最需要知道什么？'}。请像私聊一样自然回答，结合牌面给出具体、温和、有边界的观察和建议，不作绝对预言，不替我做决定。${followup ? `这是我的追问：${followup}` : ''}`
-      : `你是谨慎的梦境记录者。分析下面的梦，只谈可能的情绪和象征：${input}`;
+      : `${dreamPersona}\n请读完这段梦境记录后，用角色自己的方式和我聊它。不要把梦复述一遍，也不要把没有出现的细节当成事实。请从四个角度整理：1）梦里的事件与反复意象；2）可能对应的情绪和近期压力；3）传统梦象或文化联想（只在有对应细节时提）；4）一个适合继续聊天的问题。把观察和联想分开，避免诊断、恐吓、宿命式结论，也不要反复声明免责声明。梦境记录：\n${input}`;
     try { setResult(await callApi(prompt, kind)); } catch (error: any) { setResult(`暂时无法连接解读 API：${error?.message || '请检查设置'}`); } finally { setBusy(false); }
   };
   const saveStar = (kind: 'daily' | 'synastry', text: string, title: string, charDate?: string) => { const next = [{ id: `${Date.now()}`, createdAt: new Date().toLocaleString('zh-CN'), kind, title, text, userBirthDate: birthDate, charName: synastryCharacter?.name, charBirthDate: charDate }, ...starHistory].slice(0, 3); setStarHistory(next); writeJson(STAR_HISTORY, next); };
@@ -192,7 +223,7 @@ const AstrologyApp: React.FC = () => {
           <button disabled={busy || !userZodiac || !synastryCharacter} onClick={askSynastry} className="mt-4 w-full rounded-full bg-[#b77d85] px-6 py-3 text-sm text-white disabled:opacity-40">{busy ? '合盘中…' : 'Open a synastry note'}</button>
         </div>
         {starResult && <div className="rounded-[28px] border border-[#e2c1bf] bg-[#fffaf8]/90 p-5 text-[15px] leading-7 text-[#59454a] shadow-[0_12px_30px_rgba(173,113,122,.12)]"><div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-[#edd8d2] pb-3"><strong className="text-[#875d67]">{starResultKind === 'daily' ? 'Daily sky note' : 'Synastry note'}</strong><select value={starShareChar} onChange={(event) => setStarShareChar(event.target.value)} className="rounded-full border border-[#dfc2bd] bg-white px-3 py-2 text-sm text-[#6d4d53]"><option value="">选择角色分享</option>{(characters || []).map((character) => <option key={character.id} value={character.id}>{character.name}</option>)}</select><button disabled={!starShareChar} onClick={shareStar} className="rounded-full bg-[#a87982] px-3 py-2 text-xs text-white disabled:opacity-40">分享到聊天</button></div>{renderReading(starResult)}</div>}
-      </section>}      {tab === 'dream' && <section className="mt-5 rounded-[30px] border border-[#e6c4c2] bg-[#fffaf6]/80 p-6 shadow-[0_18px_55px_rgba(173,116,124,.13)]"><h2 className="text-xl text-[#79525d]">把梦留在这里</h2><p className="mt-1 text-sm text-[#9b7d82]">只记录，不替你下结论。</p><textarea value={dream} onChange={(event) => setDream(event.target.value)} placeholder="昨晚梦见了什么？" className="mt-5 h-36 w-full resize-none rounded-2xl border border-[#ead0cb] bg-white/75 p-4 text-sm text-[#6f4c56] outline-none placeholder:text-[#b99da1]" /><button disabled={busy || !dream.trim()} onClick={() => ask('dream', dream)} className="mt-4 rounded-full bg-[#c9919a] px-6 py-2 text-sm text-white disabled:opacity-40">{busy ? '整理中…' : '请角色看看'}</button>{result && <div className="mt-5 rounded-2xl bg-white/80 p-5 text-[15px] leading-7 text-[#59454a]">{renderReading(result)}</div>}</section>}
+      </section>}      {tab === 'dream' && <section className="mt-3 rounded-[30px] border border-[#e6c4c2] bg-[#fffaf6]/80 p-4 shadow-[0_18px_55px_rgba(173,116,124,.13)] backdrop-blur-xl sm:mt-5 sm:p-6"><div className="flex items-end justify-between gap-3"><div><div className="text-[10px] uppercase tracking-[.3em] text-[#b4878e]">DREAM NOTES</div><h2 className="mt-1 text-xl font-semibold text-[#79525d] sm:text-2xl">把梦留在这里</h2></div><span className="text-xs text-[#b18b91]">记录 · 联想 · 对话</span></div><div className="mt-4 rounded-[22px] border border-[#e7ccc6] bg-[#f8ece6]/55 p-3 sm:rounded-[26px] sm:p-4"><label className="text-xs tracking-[.14em] text-[#a87982]">选择解读者</label><select value={dreamChar} onChange={(event) => setDreamChar(event.target.value)} className="mt-2 w-full rounded-2xl border border-[#dfc3bf] bg-white/85 px-3 py-3 text-sm text-[#6f4c56] outline-none"><option value="">所有未选角色 · 使用通用语气</option>{(characters || []).map((character) => <option key={character.id} value={character.id}>{character.name}</option>)}</select></div><textarea value={dream} onChange={(event) => setDream(event.target.value)} placeholder="昨晚梦见了什么？尽量记下场景、人物、动作和醒来时的感觉。" className="mt-4 h-40 w-full resize-none rounded-2xl border border-[#ead0cb] bg-white/75 p-4 text-sm leading-6 text-[#6f4c56] outline-none placeholder:text-[#b99da1] sm:h-44" /><button disabled={busy || !dream.trim()} onClick={() => ask('dream', dream)} className="mt-4 rounded-full bg-[#c9919a] px-6 py-2.5 text-sm text-white shadow-[0_8px_18px_rgba(183,125,133,.2)] disabled:opacity-40">{busy ? '整理中…' : '请角色看看'}</button>{result && <div className="mt-5 rounded-2xl border border-[#ead5ce] bg-white/80 p-5 text-[15px] leading-7 text-[#59454a]"><div className="mb-3 border-b border-[#edd8d2] pb-3 text-sm font-semibold text-[#875d67]">{dreamCharacter?.name || '星梦集'} 的梦境笔记</div>{renderReading(result)}</div>}</section>}
       {historyOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#6b4e56]/25 p-4 backdrop-blur-sm"><div className="max-h-[82vh] w-full max-w-xl overflow-auto rounded-[30px] border border-[#e2c0c0] bg-[#fffaf6] p-5 shadow-[0_24px_80px_rgba(100,60,65,.2)]"><div className="flex items-center justify-between"><div><div className="text-[10px] uppercase tracking-[.28em] text-[#b4878e]">saved readings</div><h3 className="mt-1 text-xl font-semibold text-[#79525d]">历史收藏</h3></div><button onClick={() => setHistoryOpen(false)} className="text-xl text-[#a87982]">×</button></div>{savedReadings.length === 0 ? <div className="py-14 text-center text-sm text-[#b18b91]">还没有收藏的解牌。</div> : <div className="mt-4 space-y-2">{savedReadings.map((item) => <div key={item.id} className="flex items-center gap-3 rounded-2xl border border-[#eed8d1] bg-white/75 p-3"><button onClick={() => openReading(item)} className="min-w-0 flex-1 text-left"><div className="truncate text-sm text-[#76535d]">{item.question || '今日抽牌'} · {hydrateCards(item.cards).map((card) => card.name).join(' / ')}</div><div className="mt-1 text-xs text-[#b18b91]">{item.createdAt}</div></button><button onClick={() => deleteReading(item.id)} className="text-xs text-[#b1787f]">删除</button></div>)}</div>}<button onClick={() => setHistoryOpen(false)} className="mt-5 w-full rounded-full bg-[#f1ded8] py-3 text-sm text-[#815a63]">返回星梦集</button></div></div>}
       {starHistoryOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#6b4e56]/25 p-4 backdrop-blur-sm"><div className="max-h-[82vh] w-full max-w-xl overflow-auto rounded-[30px] border border-[#e2c0c0] bg-[#fffaf6] p-5 shadow-[0_24px_80px_rgba(100,60,65,.2)]"><div className="flex items-center justify-between"><div><div className="text-[10px] uppercase tracking-[.28em] text-[#b4878e]">stellar archive</div><h3 className="mt-1 text-xl font-semibold text-[#79525d]">星测历史（三次）</h3></div><button onClick={() => setStarHistoryOpen(false)} className="text-xl text-[#a87982]">×</button></div>{starHistory.length === 0 ? <div className="py-14 text-center text-sm text-[#b18b91]">还没有保存的星测。</div> : <div className="mt-4 space-y-2">{starHistory.map((item) => <div key={item.id} className="flex items-center gap-3 rounded-2xl border border-[#eed8d1] bg-white/75 p-3"><button onClick={() => openStarReading(item)} className="min-w-0 flex-1 text-left"><div className="truncate text-sm text-[#76535d]">{item.title}</div><div className="mt-1 text-xs text-[#b18b91]">{item.createdAt}</div></button><button onClick={() => { const next = starHistory.filter((entry) => entry.id !== item.id); setStarHistory(next); writeJson(STAR_HISTORY, next); }} className="text-xs text-[#b1787f]">删除</button></div>)}</div>}<button onClick={() => setStarHistoryOpen(false)} className="mt-5 w-full rounded-full bg-[#f1ded8] py-3 text-sm text-[#815a63]">返回星梦集</button></div></div>}
       {showApi && <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#6b4e56]/25 p-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-[30px] border border-[#e2c0c0] bg-[#fffaf6] p-6 shadow-[0_24px_80px_rgba(100,60,65,.2)]"><div className="flex items-center justify-between"><div><div className="text-[10px] uppercase tracking-[.28em] text-[#b4878e]">星梦集 · TAROT</div><h3 className="mt-1 text-xl font-semibold text-[#79525d]">塔罗 API 设置</h3></div><button onClick={() => setShowApi(false)} className="text-xl text-[#a87982]">×</button></div><p className="mt-2 text-sm text-[#8c7478]">这里直接应用聊天设置里已经保存的 API 预设。</p><select value={tarotApi.id || (tarotApi.baseUrl ? 'custom' : '')} onChange={(event) => { const preset = apiPresets.find((item) => item.id === event.target.value); if (preset) setTarotApi({ id: preset.id, ...preset.config }); else if (!event.target.value) setTarotApi({}); }} className="mt-5 w-full rounded-2xl border border-[#e2c9c3] bg-white px-4 py-3 text-[#6d4d53] outline-none"><option value="">跟随聊天默认 · {apiConfig?.model || '未配置'}</option>{apiPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name} · {preset.config.model}</option>)}</select><div className="mt-3 rounded-2xl bg-[#f8ece6] px-3 py-2 text-xs leading-5 text-[#9c7b82]">应用后只影响塔罗解读；星测、聊天和其他功能继续使用默认设置。</div><button onClick={() => { writeJson('sullyos_mi_nuomi_tarot_api', tarotApi); setShowApi(false); }} className="mt-4 w-full rounded-full bg-[#c9939a] py-3 text-sm text-white">应用此预设</button></div></div>}
